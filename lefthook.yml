@@ -1,0 +1,27 @@
+pre-commit:
+  parallel: true
+  commands:
+    rust-fmt:
+      glob: "desktop/src-tauri/**/*.rs"
+      run: cd desktop && cargo fmt --manifest-path src-tauri/Cargo.toml --check
+    rust-clippy:
+      glob: "desktop/src-tauri/**/*.rs"
+      run: cd desktop && cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+    rust-test:
+      glob: "desktop/src-tauri/**/*.rs"
+      run: cd desktop && cargo test --manifest-path src-tauri/Cargo.toml
+    ts-lint:
+      glob: "desktop/src/**/*.{ts,tsx}"
+      run: cd desktop && pnpm lint
+    ts-typecheck:
+      glob: "desktop/src/**/*.{ts,tsx}"
+      run: cd desktop && pnpm typecheck
+    ts-format:
+      glob: "desktop/src/**/*.{ts,tsx}"
+      run: cd desktop && pnpm format:check
+    ts-test:
+      glob: "desktop/src/**/*.{ts,tsx}"
+      run: cd desktop && pnpm test -- --run
+    kotlin-lint:
+      glob: "android/**/*.kt"
+      run: cd android && ./gradlew ktlintCheck

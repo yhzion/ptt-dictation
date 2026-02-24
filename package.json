@@ -1,0 +1,17 @@
+{
+  "name": "ptt-dictation",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "packageManager": "pnpm@10.28.2",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "lefthook"
+    ]
+  },
+  "devDependencies": {
+    "lefthook": "^2.1.1"
+  }
+}
