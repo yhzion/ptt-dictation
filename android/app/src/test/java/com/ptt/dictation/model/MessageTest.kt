@@ -26,19 +26,19 @@ class MessageTest {
 
     @Test
     fun `serialize PARTIAL message`() {
-        val msg = PttMessage.partial("phone-01", "s-abc", 3, "안녕하세요", 0.7)
+        val msg = PttMessage.partial("phone-01", "s-abc", 3, "hello", 0.7)
         val str = json.encodeToString(PttMessage.serializer(), msg)
         assertTrue(str.contains(""""type":"PARTIAL""""))
-        assertTrue(str.contains(""""text":"안녕하세요""""))
+        assertTrue(str.contains(""""text":"hello""""))
         assertTrue(str.contains(""""seq":3"""))
     }
 
     @Test
     fun `serialize FINAL message`() {
-        val msg = PttMessage.finalResult("phone-01", "s-abc", "최종 텍스트", 0.95)
+        val msg = PttMessage.finalResult("phone-01", "s-abc", "final text", 0.95)
         val str = json.encodeToString(PttMessage.serializer(), msg)
         assertTrue(str.contains(""""type":"FINAL""""))
-        assertTrue(str.contains(""""text":"최종 텍스트""""))
+        assertTrue(str.contains(""""text":"final text""""))
     }
 
     @Test

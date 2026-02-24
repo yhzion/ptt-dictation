@@ -30,9 +30,7 @@ describe("ClientList", () => {
     render(
       <ClientList clients={new Map()} selectedId={null} onSelect={() => {}} />,
     );
-    expect(
-      screen.getByText(/연결된 클라이언트가 없습니다/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/No connected clients/)).toBeInTheDocument();
   });
 
   it("renders client entries with device model", () => {

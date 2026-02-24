@@ -18,7 +18,7 @@ function makeClient(overrides: Partial<ClientState> = {}): ClientState {
 describe("DictationView", () => {
   it("shows empty state when no client selected", () => {
     render(<DictationView client={null} />);
-    expect(screen.getByText(/클라이언트를 선택/)).toBeInTheDocument();
+    expect(screen.getByText(/Select a client/)).toBeInTheDocument();
   });
 
   it("shows device info", () => {
@@ -30,12 +30,12 @@ describe("DictationView", () => {
     render(
       <DictationView
         client={makeClient({
-          partialText: "안녕하세요",
+          partialText: "hello",
           currentSession: "s-1",
         })}
       />,
     );
-    expect(screen.getByText(/안녕하세요/)).toBeInTheDocument();
+    expect(screen.getByText(/hello/)).toBeInTheDocument();
     expect(screen.getByTestId("typing-indicator")).toBeInTheDocument();
   });
 
@@ -43,17 +43,17 @@ describe("DictationView", () => {
     render(
       <DictationView
         client={makeClient({
-          finalTexts: ["첫 번째 문장.", "두 번째 문장."],
+          finalTexts: ["First sentence.", "Second sentence."],
         })}
       />,
     );
-    expect(screen.getByText("첫 번째 문장.")).toBeInTheDocument();
-    expect(screen.getByText("두 번째 문장.")).toBeInTheDocument();
+    expect(screen.getByText("First sentence.")).toBeInTheDocument();
+    expect(screen.getByText("Second sentence.")).toBeInTheDocument();
   });
 
   it("shows disconnected badge when not connected", () => {
     render(<DictationView client={makeClient({ connected: false })} />);
-    expect(screen.getByText(/연결 끊김/)).toBeInTheDocument();
+    expect(screen.getByText(/Disconnected/)).toBeInTheDocument();
   });
 
   it("shows listening state during active session", () => {

@@ -43,7 +43,7 @@ class MainActivity : ComponentActivity() {
             if (allGranted) {
                 setupUi()
             } else {
-                Toast.makeText(this, "마이크 및 블루투스 권한이 필요합니다", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Microphone and Bluetooth permissions are required", Toast.LENGTH_LONG).show()
                 finish()
             }
         }

@@ -17,12 +17,10 @@ describe("App", () => {
   });
   it("renders client list area", () => {
     render(<App />);
-    expect(
-      screen.getByText(/연결된 클라이언트가 없습니다/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/No connected clients/)).toBeInTheDocument();
   });
   it("renders dictation view area", () => {
     render(<App />);
-    expect(screen.getByText(/클라이언트를 선택/)).toBeInTheDocument();
+    expect(screen.getByText(/Select a client/)).toBeInTheDocument();
   });
 });

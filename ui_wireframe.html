@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PTT App UI Wireframe</title>
+    <style>
+      body {
+        background-color: #111111;
+        color: #ffffff;
+        font-family: -apple-system, BlinkMacSystemFont, "Roboto", sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 40px;
+        height: 100vh;
+        margin: 0;
+        padding: 20px;
+      }
+      .device {
+        width: 320px;
+        height: 700px;
+        background-color: #000000;
+        border: 1px solid #333333;
+        border-radius: 32px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        position: relative;
+      }
+      .header {
+        height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-bottom: 1px solid #1a1a1a;
+        font-size: 12px;
+        font-weight: 300;
+        letter-spacing: 1px;
+        color: #666666;
+      }
+      /* DISCONNECTED STATE */
+      .state-disconnected {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 40px;
+      }
+      .status-idle {
+        font-size: 16px;
+        font-weight: 300;
+        color: #888888;
+        letter-spacing: 2px;
+      }
+      .btn-outline {
+        background: transparent;
+        border: 1px solid #555555;
+        color: #aaaaaa;
+        padding: 16px 40px;
+        border-radius: 100px;
+        font-size: 14px;
+        font-weight: 300;
+        letter-spacing: 1px;
+        cursor: pointer;
+      }
+      /* CONNECTED STATE */
+      .state-connected {
+        flex: 1;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+      }
+      .ptt-surface {
+        flex: 1;
+        border: 1px solid #222222;
+        border-radius: 24px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        padding: 24px;
+        text-align: center;
+      }
+      .ptt-hint {
+        position: absolute;
+        bottom: 32px;
+        font-size: 14px;
+        font-weight: 300;
+        color: #444444;
+        letter-spacing: 1px;
+      }
+      /* LISTENING STATE */
+      .ptt-surface-listening {
+        border-color: #777777;
+        box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.05);
+      }
+      .recording-indicator {
+        position: absolute;
+        top: 24px;
+        border: 1px solid #555555;
+        color: #aaaaaa;
+        padding: 4px 16px;
+        border-radius: 100px;
+        font-size: 10px;
+        font-weight: 300;
+        letter-spacing: 2px;
+      }
+      .dictation-text {
+        font-size: 24px;
+        font-weight: 300;
+        color: #cccccc;
+        line-height: 1.5;
+        word-break: keep-all;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 1. DISCONNECTED -->
+    <div class="device">
+      <div class="header">DISCONNECTED</div>
+      <div class="state-disconnected">
+        <div class="status-idle">장치에 연결되지 않음</div>
+        <button class="btn-outline">스캔 및 연결</button>
+      </div>
+    </div>
+
+    <!-- 2. CONNECTED (IDLE) -->
+    <div class="device">
+      <div class="header" style="color: #aaaaaa">macOS CONNECTED</div>
+      <div class="state-connected">
+        <div class="ptt-surface">
+          <div class="ptt-hint">누르고 말씀하세요</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. CONNECTED (LISTENING) -->
+    <div class="device">
+      <div class="header" style="color: #aaaaaa">macOS CONNECTED</div>
+      <div class="state-connected">
+        <div class="ptt-surface ptt-surface-listening">
+          <div class="recording-indicator">LISTENING</div>
+          <div class="dictation-text">
+            안녕하세요, 지금 음성을 인식하고 있습니다. 화면 밖을 벗어나지 않도록
+            PTT 영역을 최대한 넓혔습니다.
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

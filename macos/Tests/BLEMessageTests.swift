@@ -16,26 +16,26 @@ final class BLEMessageTests: XCTestCase {
 
     func testDecodePartial() throws {
         let json = """
-        {"type":"PARTIAL","payload":{"sessionId":"s-abc123","seq":3,"text":"안녕하세요","confidence":0.85}}
+        {"type":"PARTIAL","payload":{"sessionId":"s-abc123","seq":3,"text":"hello","confidence":0.85}}
         """
         let message = try BLEMessage.decode(from: json.data(using: .utf8)!)
         guard case .partial(_, _, let text, _) = message else {
             XCTFail("Expected partial")
             return
         }
-        XCTAssertEqual(text, "안녕하세요")
+        XCTAssertEqual(text, "hello")
     }
 
     func testDecodeFinal() throws {
         let json = """
-        {"type":"FINAL","payload":{"sessionId":"s-abc123","text":"안녕하세요 반갑습니다","confidence":0.95}}
+        {"type":"FINAL","payload":{"sessionId":"s-abc123","text":"hello nice to meet you","confidence":0.95}}
         """
         let message = try BLEMessage.decode(from: json.data(using: .utf8)!)
         guard case .final(_, let text, _) = message else {
             XCTFail("Expected final")
             return
         }
-        XCTAssertEqual(text, "안녕하세요 반갑습니다")
+        XCTAssertEqual(text, "hello nice to meet you")
     }
 
     func testDecodeHello() throws {

@@ -130,7 +130,7 @@ mod tests {
 
     #[test]
     fn test_parse_partial() {
-        let json = r#"{"type":"PARTIAL","clientId":"phone-01","timestamp":1670000000000,"payload":{"sessionId":"s-abc123","seq":12,"text":"안녕하세요 오늘","confidence":0.60}}"#;
+        let json = r#"{"type":"PARTIAL","clientId":"phone-01","timestamp":1670000000000,"payload":{"sessionId":"s-abc123","seq":12,"text":"hello today","confidence":0.60}}"#;
         let msg = parse_message(json).unwrap();
         match msg {
             Message::Partial {
@@ -142,7 +142,7 @@ mod tests {
                 assert_eq!(timestamp, 1670000000000);
                 assert_eq!(payload.session_id, "s-abc123");
                 assert_eq!(payload.seq, 12);
-                assert_eq!(payload.text, "안녕하세요 오늘");
+                assert_eq!(payload.text, "hello today");
                 assert!((payload.confidence - 0.60).abs() < f64::EPSILON);
             }
             _ => panic!("expected Partial variant"),
@@ -151,7 +151,7 @@ mod tests {
 
     #[test]
     fn test_parse_final() {
-        let json = r#"{"type":"FINAL","clientId":"phone-01","timestamp":1670000000000,"payload":{"sessionId":"s-abc123","text":"안녕하세요. 오늘 회의는 오후 3시입니다.","confidence":0.93}}"#;
+        let json = r#"{"type":"FINAL","clientId":"phone-01","timestamp":1670000000000,"payload":{"sessionId":"s-abc123","text":"Hello. Today's meeting is at 3 PM.","confidence":0.93}}"#;
         let msg = parse_message(json).unwrap();
         match msg {
             Message::Final {
@@ -162,7 +162,7 @@ mod tests {
                 assert_eq!(client_id, "phone-01");
                 assert_eq!(timestamp, 1670000000000);
                 assert_eq!(payload.session_id, "s-abc123");
-                assert_eq!(payload.text, "안녕하세요. 오늘 회의는 오후 3시입니다.");
+                assert_eq!(payload.text, "Hello. Today's meeting is at 3 PM.");
                 assert!((payload.confidence - 0.93).abs() < f64::EPSILON);
             }
             _ => panic!("expected Final variant"),

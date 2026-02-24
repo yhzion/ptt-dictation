@@ -55,17 +55,17 @@ class PttScreenTest {
             PttUiState(
                 connectionState = ConnectionState.CONNECTED,
                 isPttPressed = true,
-                partialText = "테스트 텍스트",
+                partialText = "test text",
             ),
         )
         composeTestRule.onNodeWithTag("partial-text")
-            .assertTextEquals("테스트 텍스트")
+            .assertTextEquals("test text")
     }
 
     @Test
     fun showsPttHintWhenConnectedIdle() {
         render(PttUiState(connectionState = ConnectionState.CONNECTED))
         composeTestRule.onNodeWithTag("ptt-label")
-            .assertTextEquals("누르고 말씀하세요")
+            .assertTextEquals("Hold to speak")
     }
 }
