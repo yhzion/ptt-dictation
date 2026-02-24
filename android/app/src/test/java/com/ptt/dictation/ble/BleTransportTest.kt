@@ -23,18 +23,18 @@ class BleTransportTest {
 
     @Test
     fun `encodeMessage produces valid JSON for PARTIAL`() {
-        val message = PttMessage.partial("client-1", "session-1", 1, "안녕", 0.8)
+        val message = PttMessage.partial("client-1", "session-1", 1, "hello", 0.8)
         val json = BleMessageEncoder.encode(message)
         assert(json.contains("PARTIAL"))
-        assert(json.contains("안녕"))
+        assert(json.contains("hello"))
     }
 
     @Test
     fun `encodeMessage produces valid JSON for FINAL`() {
-        val message = PttMessage.finalResult("client-1", "session-1", "안녕하세요", 0.95)
+        val message = PttMessage.finalResult("client-1", "session-1", "hello world", 0.95)
         val json = BleMessageEncoder.encode(message)
         assert(json.contains("FINAL"))
-        assert(json.contains("안녕하세요"))
+        assert(json.contains("hello world"))
     }
 }
 

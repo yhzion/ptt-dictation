@@ -26,7 +26,7 @@ class PttForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification("대기 중"))
+        startForeground(NOTIFICATION_ID, buildNotification("Standby"))
     }
 
     fun updateNotification(status: String) {

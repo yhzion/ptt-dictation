@@ -4,8 +4,8 @@ import XCTest
 final class TextInjectorTests: XCTestCase {
     func testProtocolExists() {
         let mock = MockTextInjector()
-        mock.inject(text: "테스트")
-        XCTAssertEqual(mock.lastInjectedText, "테스트")
+        mock.inject(text: "test")
+        XCTAssertEqual(mock.lastInjectedText, "test")
     }
 
     func testEmptyTextIsIgnored() {

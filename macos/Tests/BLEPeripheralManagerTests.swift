@@ -23,9 +23,9 @@ final class BLEPeripheralManagerTests: XCTestCase {
         manager.onFinalText = { text in receivedText = text }
 
         let json = """
-        {"type":"FINAL","payload":{"sessionId":"s-1","text":"테스트 텍스트","confidence":0.95}}
+        {"type":"FINAL","payload":{"sessionId":"s-1","text":"test text","confidence":0.95}}
         """
         manager.handleIncomingData(json.data(using: .utf8)!, characteristicUUID: BLEConstants.finalTextCharUUID)
-        XCTAssertEqual(receivedText, "테스트 텍스트")
+        XCTAssertEqual(receivedText, "test text")
     }
 }

@@ -10,7 +10,7 @@ export function ClientList({ clients, selectedId, onSelect }: Props) {
   if (clients.size === 0) {
     return (
       <div className="client-list-empty">
-        <p>연결된 클라이언트가 없습니다</p>
+        <p>No connected clients</p>
       </div>
     );
   }

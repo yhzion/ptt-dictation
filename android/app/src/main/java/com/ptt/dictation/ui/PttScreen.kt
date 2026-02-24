@@ -16,7 +16,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -184,21 +183,7 @@ private fun DisconnectedContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(
-            text =
-                if (connectionState == ConnectionState.CONNECTING) {
-                    "연결 중..."
-                } else {
-                    "장치에 연결되지 않음"
-                },
-            color = OledColors.textPrimary,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Light,
-            letterSpacing = 2.sp,
-        )
-
         if (connectionState == ConnectionState.DISCONNECTED) {
-            Spacer(modifier = Modifier.height(40.dp))
             Box(
                 modifier =
                     Modifier
@@ -209,7 +194,7 @@ private fun DisconnectedContent(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "스캔 및 연결",
+                    text = "Scan",
                     color = OledColors.textBright,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Light,
@@ -311,7 +296,7 @@ private fun ConnectedContent(
             // Idle hint
             if (!state.isPttPressed) {
                 Text(
-                    text = "누르고 말씀하세요",
+                    text = "Hold to speak",
                     color = OledColors.textHint,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Light,

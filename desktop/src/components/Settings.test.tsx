@@ -9,6 +9,6 @@ describe("Settings", () => {
   });
   it("shows server status label", () => {
     render(<Settings port={9876} />);
-    expect(screen.getByText(/서버 포트/)).toBeInTheDocument();
+    expect(screen.getByText(/Server Port/)).toBeInTheDocument();
   });
 });

@@ -8,7 +8,7 @@ export function DictationView({ client }: Props) {
   if (!client) {
     return (
       <div className="dictation-empty">
-        <p>클라이언트를 선택해 주세요</p>
+        <p>Select a client</p>
       </div>
     );
   }
@@ -18,11 +18,11 @@ export function DictationView({ client }: Props) {
       <div className="dictation-header">
         <span className="device-name">{client.deviceModel}</span>
         {!client.connected && (
-          <span className="badge badge-disconnected">연결 끊김</span>
+          <span className="badge badge-disconnected">Disconnected</span>
         )}
         {client.currentSession && (
           <span className="badge badge-listening" data-testid="listening-badge">
-            듣는 중...
+            Listening...
           </span>
         )}
       </div>

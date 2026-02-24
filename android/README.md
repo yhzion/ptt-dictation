@@ -1,30 +1,31 @@
 # Android — PTT Dictation Client
 
-Kotlin + Jetpack Compose로 구성된 Android 클라이언트.
-PTT(Push-to-Talk) 버튼을 누르면 음성을 인식하고, WebSocket으로 데스크톱에 실시간 전송합니다.
+Android client built with Kotlin + Jetpack Compose.
+Press the PTT (Push-to-Talk) button to recognize speech and send text to the desktop in real-time via BLE.
 
 ## Architecture
 
 ```
 app/src/main/java/com/ptt/dictation/
-  MainActivity.kt              액티비티 진입점
+  MainActivity.kt              Activity entry point
   model/
-    PttMessage.kt              JSON 메시지 모델 (6 message types, kotlinx.serialization)
-  ws/
-    WebSocketManager.kt        WebSocket 인터페이스 (OkHttp 기반)
+    PttMessage.kt              JSON message model (6 message types, kotlinx.serialization)
+  ble/
+    BleCentralClient.kt        BLE Central client (scan, connect, GATT write)
+    BLEConstants.kt            Service/characteristic UUIDs
+    BleMessageEncoder.kt       Message → JSON encoding
+    PttTransport.kt            Transport interface
   stt/
-    STTManager.kt              음성 인식 엔진 인터페이스
-    ThrottleDeduper.kt         PARTIAL 메시지 200ms 스로틀 + 중복 제거
+    SpeechRecognizerSTTEngine.kt  Speech recognition engine (SpeechRecognizer API)
+    ThrottleDeduper.kt         PARTIAL message 200ms throttle + dedup
   ui/
-    PttScreen.kt               Compose UI (연결 상태, 서버 IP 입력, PTT 버튼)
-    PttViewModel.kt            UI 상태 관리 (PttUiState)
-  service/
-    PttForegroundService.kt    포그라운드 서비스 (백그라운드 녹음 유지)
+    PttScreen.kt               Compose UI (OLED-optimized, PTT button, connection status)
+    PttViewModel.kt            UI state management (PttUiState)
 ```
 
 ## Build
 
-Android Studio에서 프로젝트를 열거나:
+Open project in Android Studio, or:
 
 ```bash
 ./gradlew assembleDebug
@@ -39,10 +40,10 @@ Android Studio에서 프로젝트를 열거나:
 ## Test
 
 ```bash
-# 유닛 테스트
+# Unit tests
 ./gradlew test
 
-# UI 테스트 (에뮬레이터/디바이스 필요)
+# UI tests (requires emulator/device)
 ./gradlew connectedAndroidTest
 ```
 
@@ -55,13 +56,11 @@ Android Studio에서 프로젝트를 열거나:
 ## Key Dependencies
 
 - **Jetpack Compose** (BOM 2024.09) — UI
-- **OkHttp 4** — WebSocket 클라이언트
-- **kotlinx-serialization** — JSON 직렬화
+- **kotlinx-serialization** — JSON serialization
 - **Android SDK 34** (minSdk 26)
 
-## 사용법
+## Usage
 
-1. 앱을 실행하고 데스크톱 서버 IP를 입력합니다
-2. "연결" 버튼을 눌러 WebSocket 연결
-3. PTT 버튼을 길게 눌러 음성 인식 시작
-4. 손을 떼면 최종 텍스트가 데스크톱으로 전송됩니다
+1. Run the app and tap "Scan" to discover the macOS BLE peripheral
+2. After connection, hold the PTT button to start speech recognition
+3. Release to send the final text to the desktop

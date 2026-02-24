@@ -25,7 +25,7 @@ ws.on("open", () => {
     console.log("PTT_START sent");
 
     // Send partials
-    const partials = ["안녕", "안녕하세요", "안녕하세요 오늘", "안녕하세요 오늘 회의는"];
+    const partials = ["hello", "hello world", "hello world today", "hello world today meeting"];
     partials.forEach((text, i) => {
       setTimeout(() => {
         ws.send(JSON.stringify({
@@ -40,7 +40,7 @@ ws.on("open", () => {
     setTimeout(() => {
       ws.send(JSON.stringify({
         type: "FINAL", clientId, timestamp: Date.now(),
-        payload: { sessionId, text: "안녕하세요. 오늘 회의는 오후 3시입니다.", confidence: 0.95 },
+        payload: { sessionId, text: "Hello. Today's meeting is at 3 PM.", confidence: 0.95 },
       }));
       console.log("FINAL sent");
     }, 2000);
