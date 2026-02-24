@@ -3,13 +3,13 @@ package com.ptt.dictation.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.ptt.dictation.ble.ConnectionState
+import com.ptt.dictation.ble.PttTransport
+import com.ptt.dictation.ble.PttTransportListener
 import com.ptt.dictation.model.PttMessage
 import com.ptt.dictation.stt.STTEngine
 import com.ptt.dictation.stt.STTListener
 import com.ptt.dictation.stt.ThrottleDeduper
-import com.ptt.dictation.ws.ConnectionState
-import com.ptt.dictation.ws.MessageListener
-import com.ptt.dictation.ws.WebSocketClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,17 +22,13 @@ data class PttUiState(
     val connectionState: ConnectionState = ConnectionState.DISCONNECTED,
     val isPttPressed: Boolean = false,
     val mode: PttMode = PttMode.IDLE,
-    val serverHost: String = "192.168.1.1",
-    val serverPort: Int = 9876,
     val partialText: String = "",
 ) {
     val canPtt: Boolean get() = connectionState == ConnectionState.CONNECTED
-
-    val wsUrl: String get() = "ws://$serverHost:$serverPort"
 }
 
 class PttViewModel(
-    private val wsClient: WebSocketClient,
+    private val transport: PttTransport,
     private val sttEngine: STTEngine,
     private val clientId: String = "android-${UUID.randomUUID().toString().take(8)}",
 ) : ViewModel() {
@@ -44,10 +40,14 @@ class PttViewModel(
     private var partialSeq = 0
 
     init {
-        wsClient.setListener(
-            object : MessageListener {
-                override fun onMessage(message: PttMessage) {
-                    // ACK received - no action needed for PoC
+        transport.setListener(
+            object : PttTransportListener {
+                override fun onConnected() {
+                    // Connection handled via connectionState flow
+                }
+
+                override fun onDisconnected() {
+                    // Disconnection handled via connectionState flow
                 }
 
                 override fun onError(error: String) {
@@ -57,7 +57,7 @@ class PttViewModel(
         )
 
         viewModelScope.launch {
-            wsClient.connectionState.collect { connState ->
+            transport.connectionState.collect { connState ->
                 _state.value = _state.value.copy(connectionState = connState)
             }
         }
@@ -69,7 +69,7 @@ class PttViewModel(
                         partialSeq++
                         _state.value = _state.value.copy(partialText = text)
                         sessionId?.let { sid ->
-                            wsClient.send(
+                            transport.send(
                                 PttMessage.partial(clientId, sid, partialSeq, text, 0.5),
                             )
                         }
@@ -84,7 +84,7 @@ class PttViewModel(
                             mode = PttMode.IDLE,
                         )
                     sessionId?.let { sid ->
-                        wsClient.send(PttMessage.finalResult(clientId, sid, text, 0.9))
+                        transport.send(PttMessage.finalResult(clientId, sid, text, 0.9))
                     }
                     sessionId = null
                 }
@@ -104,21 +104,13 @@ class PttViewModel(
         )
     }
 
-    fun onServerHostChange(host: String) {
-        _state.value = _state.value.copy(serverHost = host)
-    }
-
-    fun onServerPortChange(port: Int) {
-        _state.value = _state.value.copy(serverPort = port)
-    }
-
     fun onConnect() {
         _state.value = _state.value.copy(connectionState = ConnectionState.CONNECTING)
-        wsClient.connect(_state.value.wsUrl)
+        transport.startScanning()
     }
 
     fun onDisconnect() {
-        wsClient.disconnect()
+        transport.disconnect()
     }
 
     fun onPttPress() {
@@ -132,7 +124,7 @@ class PttViewModel(
                 mode = PttMode.LISTENING,
                 partialText = "",
             )
-        wsClient.send(PttMessage.pttStart(clientId, sessionId!!))
+        transport.send(PttMessage.pttStart(clientId, sessionId!!))
         sttEngine.startListening()
     }
 
@@ -143,14 +135,14 @@ class PttViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        wsClient.disconnect()
+        transport.disconnect()
     }
 
     class Factory(
-        private val wsClient: WebSocketClient,
+        private val transport: PttTransport,
         private val sttEngine: STTEngine,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T = PttViewModel(wsClient, sttEngine) as T
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = PttViewModel(transport, sttEngine) as T
     }
 }

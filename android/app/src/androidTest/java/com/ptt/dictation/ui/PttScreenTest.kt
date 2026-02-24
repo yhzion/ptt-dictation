@@ -3,7 +3,7 @@ package com.ptt.dictation.ui
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import com.ptt.dictation.ws.ConnectionState
+import com.ptt.dictation.ble.ConnectionState
 import org.junit.Rule
 import org.junit.Test
 
@@ -17,8 +17,6 @@ class PttScreenTest {
                 state = state,
                 onPttPress = {},
                 onPttRelease = {},
-                onServerHostChange = {},
-                onServerPortChange = {},
                 onConnect = {},
                 onDisconnect = {},
             )
@@ -41,12 +39,6 @@ class PttScreenTest {
     fun showsPttButton() {
         render()
         composeTestRule.onNodeWithTag("ptt-button").assertExists()
-    }
-
-    @Test
-    fun showsServerHostInput() {
-        render()
-        composeTestRule.onNodeWithTag("server-host-input").assertExists()
     }
 
     @Test

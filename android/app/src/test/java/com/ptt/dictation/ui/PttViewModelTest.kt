@@ -1,6 +1,6 @@
 package com.ptt.dictation.ui
 
-import com.ptt.dictation.ws.ConnectionState
+import com.ptt.dictation.ble.ConnectionState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -37,11 +37,5 @@ class PttViewModelTest {
     fun `can PTT when connected`() {
         val state = PttUiState(connectionState = ConnectionState.CONNECTED)
         assertTrue(state.canPtt)
-    }
-
-    @Test
-    fun `server address format`() {
-        val state = PttUiState(serverHost = "192.168.1.10", serverPort = 9876)
-        assertEquals("ws://192.168.1.10:9876", state.wsUrl)
     }
 }

@@ -1,31 +1,38 @@
 # PTT Dictation
 
-Android PTT(Push-to-Talk) → 데스크톱 실시간 딕테이션 시스템
+Android PTT(Push-to-Talk) → macOS 실시간 딕테이션 시스템
+
+## Architecture
+
+- **Android** (Kotlin + Compose) — PTT 버튼 + 음성 인식 (SpeechRecognizer) + BLE Central
+- **macOS** (Swift + AppKit) — BLE Peripheral + 메뉴바 앱 + 텍스트 주입 (Clipboard + Cmd+V)
+- **연결**: BLE (Bluetooth Low Energy) — 별도 네트워크 설정 불필요
 
 ## Structure
 
-- `desktop/` — Tauri 데스크톱 앱 (Rust + React)
+- `macos/` — macOS 네이티브 앱 (Swift + SwiftPM)
 - `android/` — Android 클라이언트 (Kotlin + Compose)
-- `docs/` — 문서
-- `scripts/` — 유틸리티 스크립트
+- `docs/` — 문서 (프로토콜 스펙 등)
 
 ## Quick Start
 
-### Desktop
+### macOS
 
 ```bash
-cd desktop && pnpm install && pnpm tauri dev
+cd macos && swift build && swift run
 ```
 
 ### Android
 
-Android Studio에서 `android/` 프로젝트를 열고 빌드
-
-### Mock Client (Desktop 테스트용)
-
 ```bash
-npx tsx scripts/mock-client.ts
+cd android && ./gradlew installDebug
 ```
+
+## Connection
+
+1. macOS 앱 실행 → 메뉴바에 아이콘 표시, BLE advertising 시작
+2. Android 앱 실행 → BLE 스캔으로 macOS 기기 자동 발견
+3. 연결 완료 후 PTT 버튼을 눌러 딕테이션 시작
 
 ## Development
 

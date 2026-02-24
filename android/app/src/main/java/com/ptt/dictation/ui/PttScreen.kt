@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,7 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import com.ptt.dictation.ws.ConnectionState
+import com.ptt.dictation.ble.ConnectionState
 
 @Suppress("ktlint:standard:function-naming")
 @Composable
@@ -27,8 +26,6 @@ fun PttScreen(
     state: PttUiState,
     onPttPress: () -> Unit,
     onPttRelease: () -> Unit,
-    onServerHostChange: (String) -> Unit,
-    onServerPortChange: (Int) -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
 ) {
@@ -49,16 +46,6 @@ fun PttScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Server address input
-        OutlinedTextField(
-            value = state.serverHost,
-            onValueChange = onServerHostChange,
-            label = { Text("서버 IP") },
-            modifier = Modifier.testTag("server-host-input"),
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
         // Connect/Disconnect button
         Button(
             onClick = {
@@ -71,7 +58,7 @@ fun PttScreen(
             modifier = Modifier.testTag("connect-button"),
         ) {
             Text(
-                if (state.connectionState == ConnectionState.CONNECTED) "연결 해제" else "연결",
+                if (state.connectionState == ConnectionState.CONNECTED) "연결 해제" else "스캔",
             )
         }
 
