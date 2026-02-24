@@ -4,38 +4,59 @@ pub trait TextInjector: Send + Sync {
 }
 
 /// macOS: clipboard backup -> set text -> Cmd+V -> restore clipboard
-pub struct ClipboardPasteInjector;
+/// Must run on the main thread (enigo requires macOS main dispatch queue).
+pub struct ClipboardPasteInjector {
+    app_handle: tauri::AppHandle,
+}
+
+impl ClipboardPasteInjector {
+    pub fn new(app_handle: tauri::AppHandle) -> Self {
+        Self { app_handle }
+    }
+}
+
+fn do_paste(text: &str) -> Result<(), String> {
+    use arboard::Clipboard;
+    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+
+    let mut clipboard = Clipboard::new().map_err(|e| format!("Clipboard init: {e}"))?;
+    let backup = clipboard.get_text().ok();
+
+    clipboard
+        .set_text(text)
+        .map_err(|e| format!("Clipboard set: {e}"))?;
+
+    let mut enigo = Enigo::new(&Settings::default()).map_err(|e| format!("Enigo init: {e}"))?;
+    enigo
+        .key(Key::Meta, Direction::Press)
+        .map_err(|e| format!("Key press: {e}"))?;
+    enigo
+        .key(Key::Unicode('v'), Direction::Click)
+        .map_err(|e| format!("Key click: {e}"))?;
+    enigo
+        .key(Key::Meta, Direction::Release)
+        .map_err(|e| format!("Key release: {e}"))?;
+
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
+    if let Some(old) = backup {
+        let _ = clipboard.set_text(&old);
+    }
+
+    Ok(())
+}
 
 impl TextInjector for ClipboardPasteInjector {
     fn inject(&self, text: &str) -> Result<(), String> {
-        use arboard::Clipboard;
-        use enigo::{Direction, Enigo, Key, Keyboard, Settings};
-
-        let mut clipboard = Clipboard::new().map_err(|e| format!("Clipboard init: {e}"))?;
-        let backup = clipboard.get_text().ok();
-
-        clipboard
-            .set_text(text)
-            .map_err(|e| format!("Clipboard set: {e}"))?;
-
-        let mut enigo = Enigo::new(&Settings::default()).map_err(|e| format!("Enigo init: {e}"))?;
-        enigo
-            .key(Key::Meta, Direction::Press)
-            .map_err(|e| format!("Key press: {e}"))?;
-        enigo
-            .key(Key::Unicode('v'), Direction::Click)
-            .map_err(|e| format!("Key click: {e}"))?;
-        enigo
-            .key(Key::Meta, Direction::Release)
-            .map_err(|e| format!("Key release: {e}"))?;
-
-        std::thread::sleep(std::time::Duration::from_millis(100));
-
-        if let Some(old) = backup {
-            let _ = clipboard.set_text(&old);
-        }
-
-        Ok(())
+        let text = text.to_string();
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.app_handle
+            .run_on_main_thread(move || {
+                let result = do_paste(&text);
+                let _ = tx.send(result);
+            })
+            .map_err(|e| format!("Dispatch to main thread: {e}"))?;
+        rx.recv().map_err(|e| format!("Main thread recv: {e}"))?
     }
 }
 

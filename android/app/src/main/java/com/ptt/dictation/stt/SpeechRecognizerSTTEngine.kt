@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Log
 
 class SpeechRecognizerSTTEngine(
     private val context: Context,
@@ -14,6 +15,8 @@ class SpeechRecognizerSTTEngine(
     private var listener: STTListener? = null
 
     override fun startListening() {
+        Log.d(TAG, "startListening called")
+        destroyRecognizer()
         recognizer =
             SpeechRecognizer.createSpeechRecognizer(context).apply {
                 setRecognitionListener(createRecognitionListener())
@@ -31,9 +34,9 @@ class SpeechRecognizerSTTEngine(
     }
 
     override fun stopListening() {
+        Log.d(TAG, "stopListening called")
         recognizer?.stopListening()
-        recognizer?.destroy()
-        recognizer = null
+        // Do NOT destroy here — onResults/onError will handle cleanup
     }
 
     override fun setListener(listener: STTListener) {
@@ -42,12 +45,18 @@ class SpeechRecognizerSTTEngine(
 
     override fun isAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
 
+    private fun destroyRecognizer() {
+        recognizer?.destroy()
+        recognizer = null
+    }
+
     private fun createRecognitionListener() =
         object : RecognitionListener {
             override fun onPartialResults(partialResults: Bundle?) {
                 val texts =
                     partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 if (!texts.isNullOrEmpty()) {
+                    Log.d(TAG, "onPartialResults: ${texts[0]}")
                     listener?.onPartialResult(texts[0])
                 }
             }
@@ -55,6 +64,8 @@ class SpeechRecognizerSTTEngine(
             override fun onResults(results: Bundle?) {
                 val texts =
                     results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                Log.d(TAG, "onResults: ${texts?.firstOrNull()}")
+                destroyRecognizer()
                 if (!texts.isNullOrEmpty()) {
                     listener?.onFinalResult(texts[0])
                 }
@@ -68,22 +79,34 @@ class SpeechRecognizerSTTEngine(
                         SpeechRecognizer.ERROR_AUDIO -> "Audio error"
                         else -> "Error code: $error"
                     }
+                Log.e(TAG, "onError: $error ($msg)")
+                destroyRecognizer()
                 listener?.onError(error, msg)
             }
 
-            override fun onReadyForSpeech(params: Bundle?) {}
+            override fun onReadyForSpeech(params: Bundle?) {
+                Log.d(TAG, "onReadyForSpeech")
+            }
 
-            override fun onBeginningOfSpeech() {}
+            override fun onBeginningOfSpeech() {
+                Log.d(TAG, "onBeginningOfSpeech")
+            }
 
             override fun onRmsChanged(rmsdB: Float) {}
 
             override fun onBufferReceived(buffer: ByteArray?) {}
 
-            override fun onEndOfSpeech() {}
+            override fun onEndOfSpeech() {
+                Log.d(TAG, "onEndOfSpeech")
+            }
 
             override fun onEvent(
                 eventType: Int,
                 params: Bundle?,
             ) {}
         }
+
+    companion object {
+        private const val TAG = "SpeechRecognizerSTT"
+    }
 }

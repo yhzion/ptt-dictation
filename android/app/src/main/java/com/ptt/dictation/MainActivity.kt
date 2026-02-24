@@ -50,7 +50,7 @@ class MainActivity : ComponentActivity() {
     private fun setupUi() {
         startForegroundService(Intent(this, PttForegroundService::class.java))
 
-        val wsClient = OkHttpWebSocketClient(clientId = "android-${Build.MODEL}")
+        val wsClient = OkHttpWebSocketClient(clientId = "android-${Build.MODEL}", deviceModel = Build.MODEL)
         val sttEngine = SpeechRecognizerSTTEngine(this)
         val factory = PttViewModel.Factory(wsClient, sttEngine)
         viewModel = ViewModelProvider(this, factory)[PttViewModel::class.java]

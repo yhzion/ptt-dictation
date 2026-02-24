@@ -35,13 +35,15 @@ async fn get_server_port() -> u16 {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![get_server_port])
         .setup(|app| {
             let handle = app.handle().clone();
             let registry = Arc::new(tokio::sync::Mutex::new(ClientRegistry::new(15)));
-            let injector: Arc<dyn injection::TextInjector> = Arc::new(ClipboardPasteInjector);
+            let injector: Arc<dyn injection::TextInjector> =
+                Arc::new(ClipboardPasteInjector::new(handle.clone()));
             let emitter: Arc<dyn ws_server::EventEmitter> =
                 Arc::new(TauriEventEmitter { app_handle: handle });
 

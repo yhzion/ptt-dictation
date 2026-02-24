@@ -1,8 +1,8 @@
 package com.ptt.dictation.ui
 
-import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
 import com.ptt.dictation.model.PttMessage
 import com.ptt.dictation.stt.STTEngine
 import com.ptt.dictation.stt.STTListener
@@ -13,6 +13,7 @@ import com.ptt.dictation.ws.WebSocketClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 enum class PttMode { IDLE, LISTENING }
@@ -54,6 +55,12 @@ class PttViewModel(
                 }
             },
         )
+
+        viewModelScope.launch {
+            wsClient.connectionState.collect { connState ->
+                _state.value = _state.value.copy(connectionState = connState)
+            }
+        }
 
         sttEngine.setListener(
             object : STTListener {
@@ -106,27 +113,12 @@ class PttViewModel(
     }
 
     fun onConnect() {
-        wsClient.connect(_state.value.wsUrl)
         _state.value = _state.value.copy(connectionState = ConnectionState.CONNECTING)
-
-        Thread {
-            var attempts = 0
-            while (wsClient.connectionState.value != ConnectionState.CONNECTED && attempts < 50) {
-                Thread.sleep(100)
-                attempts++
-            }
-            if (wsClient.connectionState.value == ConnectionState.CONNECTED) {
-                wsClient.send(PttMessage.hello(clientId, Build.MODEL, "Google"))
-                _state.value = _state.value.copy(connectionState = ConnectionState.CONNECTED)
-            } else {
-                _state.value = _state.value.copy(connectionState = ConnectionState.DISCONNECTED)
-            }
-        }.start()
+        wsClient.connect(_state.value.wsUrl)
     }
 
     fun onDisconnect() {
         wsClient.disconnect()
-        _state.value = _state.value.copy(connectionState = ConnectionState.DISCONNECTED)
     }
 
     fun onPttPress() {
