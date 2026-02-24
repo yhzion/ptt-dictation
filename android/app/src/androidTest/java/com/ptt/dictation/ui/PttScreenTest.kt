@@ -26,24 +26,46 @@ class PttScreenTest {
     @Test
     fun showsDisconnectedStatus() {
         render()
-        composeTestRule.onNodeWithTag("connection-status").assertTextEquals("연결 안 됨")
+        composeTestRule.onNodeWithTag("connection-status")
+            .assertTextEquals("DISCONNECTED")
     }
 
     @Test
     fun showsConnectedStatus() {
         render(PttUiState(connectionState = ConnectionState.CONNECTED))
-        composeTestRule.onNodeWithTag("connection-status").assertTextEquals("연결됨")
+        composeTestRule.onNodeWithTag("connection-status")
+            .assertTextEquals("CONNECTED")
     }
 
     @Test
-    fun showsPttButton() {
+    fun showsScanButtonWhenDisconnected() {
         render()
+        composeTestRule.onNodeWithTag("connect-button").assertExists()
+    }
+
+    @Test
+    fun showsPttButtonWhenConnected() {
+        render(PttUiState(connectionState = ConnectionState.CONNECTED))
         composeTestRule.onNodeWithTag("ptt-button").assertExists()
     }
 
     @Test
-    fun showsPartialTextWhenPresent() {
-        render(PttUiState(partialText = "테스트 텍스트"))
-        composeTestRule.onNodeWithTag("partial-text").assertTextEquals("테스트 텍스트")
+    fun showsPartialTextWhenListening() {
+        render(
+            PttUiState(
+                connectionState = ConnectionState.CONNECTED,
+                isPttPressed = true,
+                partialText = "테스트 텍스트",
+            ),
+        )
+        composeTestRule.onNodeWithTag("partial-text")
+            .assertTextEquals("테스트 텍스트")
+    }
+
+    @Test
+    fun showsPttHintWhenConnectedIdle() {
+        render(PttUiState(connectionState = ConnectionState.CONNECTED))
+        composeTestRule.onNodeWithTag("ptt-label")
+            .assertTextEquals("누르고 말씀하세요")
     }
 }

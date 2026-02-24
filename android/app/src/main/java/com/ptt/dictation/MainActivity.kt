@@ -10,6 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
@@ -71,7 +72,7 @@ class MainActivity : ComponentActivity() {
         viewModel = ViewModelProvider(this, factory)[PttViewModel::class.java]
 
         setContent {
-            MaterialTheme {
+            MaterialTheme(colorScheme = darkColorScheme()) {
                 val state by viewModel.state.collectAsState()
                 PttScreen(
                     state = state,

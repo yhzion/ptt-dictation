@@ -13,13 +13,15 @@ class SpeechRecognizerSTTEngine(
 ) : STTEngine {
     private var recognizer: SpeechRecognizer? = null
     private var listener: STTListener? = null
+    private var generation = 0
 
     override fun startListening() {
         Log.d(TAG, "startListening called")
         destroyRecognizer()
+        val gen = ++generation
         recognizer =
             SpeechRecognizer.createSpeechRecognizer(context).apply {
-                setRecognitionListener(createRecognitionListener())
+                setRecognitionListener(createRecognitionListener(gen))
             }
         val intent =
             Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -50,9 +52,12 @@ class SpeechRecognizerSTTEngine(
         recognizer = null
     }
 
-    private fun createRecognitionListener() =
+    private fun createRecognitionListener(gen: Int) =
         object : RecognitionListener {
+            private fun isStale() = gen != generation
+
             override fun onPartialResults(partialResults: Bundle?) {
+                if (isStale()) return
                 val texts =
                     partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 if (!texts.isNullOrEmpty()) {
@@ -62,6 +67,10 @@ class SpeechRecognizerSTTEngine(
             }
 
             override fun onResults(results: Bundle?) {
+                if (isStale()) {
+                    Log.d(TAG, "onResults: STALE (gen=$gen, current=$generation)")
+                    return
+                }
                 val texts =
                     results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 Log.d(TAG, "onResults: ${texts?.firstOrNull()}")
@@ -72,6 +81,10 @@ class SpeechRecognizerSTTEngine(
             }
 
             override fun onError(error: Int) {
+                if (isStale()) {
+                    Log.d(TAG, "onError: STALE (gen=$gen, current=$generation)")
+                    return
+                }
                 val msg =
                     when (error) {
                         SpeechRecognizer.ERROR_NO_MATCH -> "No match"
