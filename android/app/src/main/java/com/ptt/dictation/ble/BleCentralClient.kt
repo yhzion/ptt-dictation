@@ -15,7 +15,6 @@ import android.content.Context
 import android.os.Build
 import android.os.ParcelUuid
 import com.ptt.dictation.model.PttMessage
-import com.ptt.dictation.ws.ConnectionState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

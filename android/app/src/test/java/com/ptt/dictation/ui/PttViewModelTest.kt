@@ -1,6 +1,6 @@
 package com.ptt.dictation.ui
 
-import com.ptt.dictation.ws.ConnectionState
+import com.ptt.dictation.ble.ConnectionState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

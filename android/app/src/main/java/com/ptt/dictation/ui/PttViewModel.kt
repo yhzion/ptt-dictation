@@ -3,13 +3,13 @@ package com.ptt.dictation.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.ptt.dictation.ble.ConnectionState
 import com.ptt.dictation.ble.PttTransport
 import com.ptt.dictation.ble.PttTransportListener
 import com.ptt.dictation.model.PttMessage
 import com.ptt.dictation.stt.STTEngine
 import com.ptt.dictation.stt.STTListener
 import com.ptt.dictation.stt.ThrottleDeduper
-import com.ptt.dictation.ws.ConnectionState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

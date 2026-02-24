@@ -1,7 +1,6 @@
 package com.ptt.dictation.ble
 
 import com.ptt.dictation.model.PttMessage
-import com.ptt.dictation.ws.ConnectionState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertEquals

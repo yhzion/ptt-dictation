@@ -1,9 +1,10 @@
 package com.ptt.dictation.ble
 
 import com.ptt.dictation.model.PttMessage
-import com.ptt.dictation.ws.ConnectionState
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.Json
+
+enum class ConnectionState { DISCONNECTED, CONNECTING, CONNECTED }
 
 interface PttTransportListener {
     fun onConnected()

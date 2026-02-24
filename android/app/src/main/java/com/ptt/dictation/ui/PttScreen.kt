@@ -18,7 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import com.ptt.dictation.ws.ConnectionState
+import com.ptt.dictation.ble.ConnectionState
 
 @Suppress("ktlint:standard:function-naming")
 @Composable
