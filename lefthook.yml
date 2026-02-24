@@ -21,7 +21,7 @@ pre-commit:
       run: cd desktop && pnpm format:check
     ts-test:
       glob: "desktop/src/**/*.{ts,tsx}"
-      run: cd desktop && pnpm test -- --run
+      run: cd desktop && pnpm test:run
     kotlin-lint:
       glob: "android/**/*.kt"
       run: cd android && ./gradlew ktlintCheck
