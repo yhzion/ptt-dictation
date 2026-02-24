@@ -10,6 +10,8 @@ import com.ptt.dictation.model.PttMessage
 import com.ptt.dictation.stt.STTEngine
 import com.ptt.dictation.stt.STTListener
 import com.ptt.dictation.stt.ThrottleDeduper
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,6 +40,9 @@ class PttViewModel(
     private val throttleDeduper = ThrottleDeduper(intervalMs = 200)
     private var sessionId: String? = null
     private var partialSeq = 0
+    private var shouldAutoReconnect = false
+    private var reconnectJob: Job? = null
+    private val accumulatedText = StringBuilder()
 
     init {
         transport.setListener(
@@ -58,7 +63,29 @@ class PttViewModel(
 
         viewModelScope.launch {
             transport.connectionState.collect { connState ->
+                val prevState = _state.value.connectionState
                 _state.value = _state.value.copy(connectionState = connState)
+
+                if (connState == ConnectionState.CONNECTED) {
+                    reconnectJob?.cancel()
+                    shouldAutoReconnect = true
+                } else if (
+                    prevState == ConnectionState.CONNECTED &&
+                    connState == ConnectionState.DISCONNECTED &&
+                    shouldAutoReconnect
+                ) {
+                    reconnectJob =
+                        viewModelScope.launch {
+                            delay(AUTO_RECONNECT_DELAY_MS)
+                            if (shouldAutoReconnect) {
+                                _state.value =
+                                    _state.value.copy(
+                                        connectionState = ConnectionState.CONNECTING,
+                                    )
+                                transport.startScanning()
+                            }
+                        }
+                }
             }
         }
 
@@ -67,38 +94,69 @@ class PttViewModel(
                 override fun onPartialResult(text: String) {
                     if (throttleDeduper.shouldEmit(text)) {
                         partialSeq++
-                        _state.value = _state.value.copy(partialText = text)
+                        val fullText = accumulatedText.toString() + text
+                        _state.value = _state.value.copy(partialText = fullText)
                         sessionId?.let { sid ->
                             transport.send(
-                                PttMessage.partial(clientId, sid, partialSeq, text, 0.5),
+                                PttMessage.partial(clientId, sid, partialSeq, fullText, 0.5),
                             )
                         }
                     }
                 }
 
                 override fun onFinalResult(text: String) {
-                    _state.value =
-                        _state.value.copy(
-                            partialText = "",
-                            isPttPressed = false,
-                            mode = PttMode.IDLE,
-                        )
-                    sessionId?.let { sid ->
-                        transport.send(PttMessage.finalResult(clientId, sid, text, 0.9))
+                    if (_state.value.isPttPressed) {
+                        // Still holding — accumulate and restart STT
+                        if (accumulatedText.isNotEmpty()) accumulatedText.append(" ")
+                        accumulatedText.append(text)
+                        _state.value =
+                            _state.value.copy(partialText = accumulatedText.toString())
+                        sttEngine.startListening()
+                    } else {
+                        // Released — send accumulated FINAL
+                        if (accumulatedText.isNotEmpty()) accumulatedText.append(" ")
+                        accumulatedText.append(text)
+                        val finalText = accumulatedText.toString()
+                        _state.value =
+                            _state.value.copy(
+                                partialText = "",
+                                mode = PttMode.IDLE,
+                            )
+                        sessionId?.let { sid ->
+                            transport.send(
+                                PttMessage.finalResult(clientId, sid, finalText, 0.9),
+                            )
+                        }
+                        sessionId = null
+                        accumulatedText.clear()
                     }
-                    sessionId = null
                 }
 
                 override fun onError(
                     errorCode: Int,
                     message: String,
                 ) {
-                    _state.value =
-                        _state.value.copy(
-                            isPttPressed = false,
-                            mode = PttMode.IDLE,
-                            partialText = "",
-                        )
+                    if (_state.value.isPttPressed) {
+                        // Still holding — restart STT
+                        sttEngine.startListening()
+                    } else {
+                        // Released — send accumulated text if any
+                        val finalText = accumulatedText.toString()
+                        if (finalText.isNotEmpty()) {
+                            sessionId?.let { sid ->
+                                transport.send(
+                                    PttMessage.finalResult(clientId, sid, finalText, 0.9),
+                                )
+                            }
+                        }
+                        _state.value =
+                            _state.value.copy(
+                                mode = PttMode.IDLE,
+                                partialText = "",
+                            )
+                        sessionId = null
+                        accumulatedText.clear()
+                    }
                 }
             },
         )
@@ -110,6 +168,8 @@ class PttViewModel(
     }
 
     fun onDisconnect() {
+        shouldAutoReconnect = false
+        reconnectJob?.cancel()
         transport.disconnect()
     }
 
@@ -118,6 +178,7 @@ class PttViewModel(
         sessionId = "s-${UUID.randomUUID().toString().take(8)}"
         partialSeq = 0
         throttleDeduper.reset()
+        accumulatedText.clear()
         _state.value =
             _state.value.copy(
                 isPttPressed = true,
@@ -144,5 +205,9 @@ class PttViewModel(
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T = PttViewModel(transport, sttEngine) as T
+    }
+
+    companion object {
+        private const val AUTO_RECONNECT_DELAY_MS = 2000L
     }
 }

@@ -13,6 +13,8 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelUuid
 import com.ptt.dictation.model.PttMessage
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,11 +42,24 @@ class BleCentralClient(
     private var finalTextChar: BluetoothGattCharacteristic? = null
     private var deviceInfoChar: BluetoothGattCharacteristic? = null
 
+    private val handler = Handler(Looper.getMainLooper())
+    private val scanTimeoutRunnable: Runnable =
+        Runnable {
+            bluetoothAdapter.bluetoothLeScanner?.stopScan(scanCallback)
+            if (_connectionState.value != ConnectionState.CONNECTED) {
+                _connectionState.value = ConnectionState.DISCONNECTED
+            }
+        }
+
     override fun setListener(listener: PttTransportListener) {
         this.listener = listener
     }
 
     override fun startScanning() {
+        // Clean up stale GATT from previous session
+        bluetoothGatt?.close()
+        bluetoothGatt = null
+
         val scanner = bluetoothAdapter.bluetoothLeScanner ?: return
         val filter =
             ScanFilter.Builder()
@@ -54,7 +69,9 @@ class BleCentralClient(
             ScanSettings.Builder()
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
                 .build()
+        handler.removeCallbacks(scanTimeoutRunnable)
         scanner.startScan(listOf(filter), settings, scanCallback)
+        handler.postDelayed(scanTimeoutRunnable, SCAN_TIMEOUT_MS)
     }
 
     override fun connect(deviceId: String) {
@@ -64,6 +81,7 @@ class BleCentralClient(
     }
 
     override fun disconnect() {
+        handler.removeCallbacks(scanTimeoutRunnable)
         bluetoothGatt?.disconnect()
         bluetoothGatt?.close()
         bluetoothGatt = null
@@ -112,6 +130,7 @@ class BleCentralClient(
                 callbackType: Int,
                 result: ScanResult,
             ) {
+                handler.removeCallbacks(scanTimeoutRunnable)
                 bluetoothAdapter.bluetoothLeScanner?.stopScan(this)
                 connect(result.device.address)
             }
@@ -129,6 +148,12 @@ class BleCentralClient(
                         gatt.discoverServices()
                     }
                     BluetoothProfile.STATE_DISCONNECTED -> {
+                        bluetoothGatt?.close()
+                        bluetoothGatt = null
+                        controlChar = null
+                        partialTextChar = null
+                        finalTextChar = null
+                        deviceInfoChar = null
                         _connectionState.value = ConnectionState.DISCONNECTED
                         listener?.onDisconnected()
                     }
@@ -152,4 +177,8 @@ class BleCentralClient(
                 sendHello()
             }
         }
+
+    companion object {
+        private const val SCAN_TIMEOUT_MS = 10_000L
+    }
 }
