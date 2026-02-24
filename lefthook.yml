@@ -24,4 +24,4 @@ pre-commit:
       run: cd desktop && pnpm test:run
     kotlin-lint:
       glob: "android/**/*.kt"
-      run: cd android && ./gradlew ktlintCheck
+      run: cd android && JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17}" ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}" ./gradlew ktlintCheck
