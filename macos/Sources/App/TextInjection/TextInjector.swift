@@ -27,7 +27,15 @@ class ClipboardTextInjector: TextInjector {
         keyDown?.post(tap: .cghidEventTap)
         keyUp?.post(tap: .cghidEventTap)
 
-        // 4. Restore clipboard after paste completes
+        // 4. Simulate Enter key if enabled
+        if Preferences.shared.autoEnter {
+            let enterDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_Return), keyDown: true)
+            let enterUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_Return), keyDown: false)
+            enterDown?.post(tap: .cghidEventTap)
+            enterUp?.post(tap: .cghidEventTap)
+        }
+
+        // 5. Restore clipboard after paste completes
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             guard let self else { return }
             self.pasteboard.clearContents()
