@@ -1,4 +1,5 @@
 pub mod client_registry;
+pub mod injection;
 pub mod protocol;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
