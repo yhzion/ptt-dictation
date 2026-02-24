@@ -35,12 +35,14 @@ class ClipboardTextInjector: TextInjector {
             enterUp?.post(tap: .cghidEventTap)
         }
 
-        // 5. Restore clipboard after paste completes
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-            guard let self else { return }
-            self.pasteboard.clearContents()
-            if let backup {
-                self.pasteboard.setString(backup, forType: .string)
+        // 5. Restore clipboard (unless user wants to keep it)
+        if !Preferences.shared.copyToClipboard {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                guard let self else { return }
+                self.pasteboard.clearContents()
+                if let backup {
+                    self.pasteboard.setString(backup, forType: .string)
+                }
             }
         }
     }
