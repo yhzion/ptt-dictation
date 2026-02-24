@@ -17,8 +17,6 @@ class PttScreenTest {
                 state = state,
                 onPttPress = {},
                 onPttRelease = {},
-                onServerHostChange = {},
-                onServerPortChange = {},
                 onConnect = {},
                 onDisconnect = {},
             )
@@ -41,12 +39,6 @@ class PttScreenTest {
     fun showsPttButton() {
         render()
         composeTestRule.onNodeWithTag("ptt-button").assertExists()
-    }
-
-    @Test
-    fun showsServerHostInput() {
-        render()
-        composeTestRule.onNodeWithTag("server-host-input").assertExists()
     }
 
     @Test

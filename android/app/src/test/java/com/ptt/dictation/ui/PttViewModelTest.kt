@@ -38,10 +38,4 @@ class PttViewModelTest {
         val state = PttUiState(connectionState = ConnectionState.CONNECTED)
         assertTrue(state.canPtt)
     }
-
-    @Test
-    fun `server address format`() {
-        val state = PttUiState(serverHost = "192.168.1.10", serverPort = 9876)
-        assertEquals("ws://192.168.1.10:9876", state.wsUrl)
-    }
 }

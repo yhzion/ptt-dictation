@@ -14,11 +14,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
+import com.ptt.dictation.ble.BleCentralClient
 import com.ptt.dictation.service.PttForegroundService
 import com.ptt.dictation.stt.SpeechRecognizerSTTEngine
 import com.ptt.dictation.ui.PttScreen
 import com.ptt.dictation.ui.PttViewModel
-import com.ptt.dictation.ws.OkHttpWebSocketClient
 
 class MainActivity : ComponentActivity() {
     private lateinit var viewModel: PttViewModel
@@ -50,9 +50,9 @@ class MainActivity : ComponentActivity() {
     private fun setupUi() {
         startForegroundService(Intent(this, PttForegroundService::class.java))
 
-        val wsClient = OkHttpWebSocketClient(clientId = "android-${Build.MODEL}", deviceModel = Build.MODEL)
+        val transport = BleCentralClient(context = this, clientId = "android-${Build.MODEL}", deviceModel = Build.MODEL)
         val sttEngine = SpeechRecognizerSTTEngine(this)
-        val factory = PttViewModel.Factory(wsClient, sttEngine)
+        val factory = PttViewModel.Factory(transport, sttEngine)
         viewModel = ViewModelProvider(this, factory)[PttViewModel::class.java]
 
         setContent {
@@ -62,8 +62,6 @@ class MainActivity : ComponentActivity() {
                     state = state,
                     onPttPress = viewModel::onPttPress,
                     onPttRelease = viewModel::onPttRelease,
-                    onServerHostChange = viewModel::onServerHostChange,
-                    onServerPortChange = viewModel::onServerPortChange,
                     onConnect = viewModel::onConnect,
                     onDisconnect = viewModel::onDisconnect,
                 )
