@@ -23,14 +23,26 @@ import com.ptt.dictation.ui.PttViewModel
 class MainActivity : ComponentActivity() {
     private lateinit var viewModel: PttViewModel
 
-    private val requestPermissionLauncher =
+    private val requiredPermissions: Array<String>
+        get() =
+            buildList {
+                add(Manifest.permission.RECORD_AUDIO)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    add(Manifest.permission.BLUETOOTH_SCAN)
+                    add(Manifest.permission.BLUETOOTH_CONNECT)
+                }
+                add(Manifest.permission.ACCESS_FINE_LOCATION)
+            }.toTypedArray()
+
+    private val requestPermissionsLauncher =
         registerForActivityResult(
-            ActivityResultContracts.RequestPermission(),
-        ) { isGranted ->
-            if (isGranted) {
+            ActivityResultContracts.RequestMultiplePermissions(),
+        ) { results ->
+            val allGranted = results.values.all { it }
+            if (allGranted) {
                 setupUi()
             } else {
-                Toast.makeText(this, "마이크 권한이 필요합니다", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "마이크 및 블루투스 권한이 필요합니다", Toast.LENGTH_LONG).show()
                 finish()
             }
         }
@@ -38,12 +50,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-            == PackageManager.PERMISSION_GRANTED
-        ) {
+        val missingPermissions =
+            requiredPermissions.filter {
+                ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+            }
+
+        if (missingPermissions.isEmpty()) {
             setupUi()
         } else {
-            requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            requestPermissionsLauncher.launch(missingPermissions.toTypedArray())
         }
     }
 
