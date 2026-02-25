@@ -39,6 +39,15 @@ data class PttMessage(
             payload = buildJsonObject { put("sessionId", sessionId) },
         )
 
+        fun pttEnd(
+            clientId: String,
+            sessionId: String,
+        ) = PttMessage(
+            type = "PTT_END",
+            clientId = clientId,
+            payload = buildJsonObject { put("sessionId", sessionId) },
+        )
+
         fun partial(
             clientId: String,
             sessionId: String,

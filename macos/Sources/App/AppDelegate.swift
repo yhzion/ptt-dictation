@@ -8,6 +8,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var deviceMenuItem: NSMenuItem!
     private var isDeviceConnected = false
     private var preferencesWindow: PreferencesWindow?
+    private var pttActiveWatchdog: DispatchWorkItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusItem()
@@ -45,6 +46,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         bleManager.onDeviceDisconnected = { [weak self] in
             DispatchQueue.main.async {
+                self?.cancelPttWatchdog()
                 self?.isDeviceConnected = false
                 self?.updateStatusIcon(dotColor: nil)
                 self?.deviceMenuItem.title = "No devices connected"
@@ -53,16 +55,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         bleManager.onPttStart = { [weak self] _ in
             DispatchQueue.main.async {
-                self?.updateStatusIcon(dotColor: .systemRed)
+                self?.setPttActive()
+            }
+        }
+
+        bleManager.onPttEnd = { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.setPttInactive()
             }
         }
 
         bleManager.onFinalText = { [weak self] text in
             DispatchQueue.main.async {
                 self?.textInjector.inject(text: text)
-                if self?.isDeviceConnected == true {
-                    self?.updateStatusIcon(dotColor: .systemGreen)
-                }
+                self?.setPttInactive()
             }
         }
 
@@ -113,5 +119,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         image.isTemplate = false
         return image
+    }
+
+    private func setPttActive() {
+        updateStatusIcon(dotColor: .systemRed)
+        schedulePttWatchdog()
+    }
+
+    private func setPttInactive() {
+        cancelPttWatchdog()
+        if isDeviceConnected {
+            updateStatusIcon(dotColor: .systemGreen)
+        } else {
+            updateStatusIcon(dotColor: nil)
+        }
+    }
+
+    private func schedulePttWatchdog() {
+        cancelPttWatchdog()
+        let watchdog =
+            DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                if self.isDeviceConnected {
+                    self.updateStatusIcon(dotColor: .systemGreen)
+                }
+            }
+        pttActiveWatchdog = watchdog
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: watchdog)
+    }
+
+    private func cancelPttWatchdog() {
+        pttActiveWatchdog?.cancel()
+        pttActiveWatchdog = nil
     }
 }

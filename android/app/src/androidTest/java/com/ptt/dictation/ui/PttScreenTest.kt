@@ -1,5 +1,6 @@
 package com.ptt.dictation.ui
 
+import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -38,9 +39,9 @@ class PttScreenTest {
     }
 
     @Test
-    fun showsScanButtonWhenDisconnected() {
+    fun showsAutoReconnectHintWhenDisconnected() {
         render()
-        composeTestRule.onNodeWithTag("connect-button").assertExists()
+        composeTestRule.onNodeWithTag("auto-reconnect-hint").assertExists()
     }
 
     @Test

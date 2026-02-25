@@ -14,6 +14,18 @@ final class BLEMessageTests: XCTestCase {
         XCTAssertEqual(sessionId, "s-abc123")
     }
 
+    func testDecodePttEnd() throws {
+        let json = """
+        {"type":"PTT_END","payload":{"sessionId":"s-abc123"}}
+        """
+        let message = try BLEMessage.decode(from: json.data(using: .utf8)!)
+        guard case .pttEnd(let sessionId) = message else {
+            XCTFail("Expected pttEnd")
+            return
+        }
+        XCTAssertEqual(sessionId, "s-abc123")
+    }
+
     func testDecodePartial() throws {
         let json = """
         {"type":"PARTIAL","payload":{"sessionId":"s-abc123","seq":3,"text":"hello","confidence":0.85}}

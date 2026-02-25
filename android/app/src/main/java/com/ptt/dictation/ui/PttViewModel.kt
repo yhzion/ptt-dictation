@@ -40,7 +40,7 @@ class PttViewModel(
     private val throttleDeduper = ThrottleDeduper(intervalMs = 200)
     private var sessionId: String? = null
     private var partialSeq = 0
-    private var shouldAutoReconnect = false
+    private var shouldAutoReconnect = true
     private var reconnectJob: Job? = null
     private val accumulatedText = StringBuilder()
 
@@ -63,28 +63,12 @@ class PttViewModel(
 
         viewModelScope.launch {
             transport.connectionState.collect { connState ->
-                val prevState = _state.value.connectionState
                 _state.value = _state.value.copy(connectionState = connState)
 
                 if (connState == ConnectionState.CONNECTED) {
                     reconnectJob?.cancel()
-                    shouldAutoReconnect = true
-                } else if (
-                    prevState == ConnectionState.CONNECTED &&
-                    connState == ConnectionState.DISCONNECTED &&
-                    shouldAutoReconnect
-                ) {
-                    reconnectJob =
-                        viewModelScope.launch {
-                            delay(AUTO_RECONNECT_DELAY_MS)
-                            if (shouldAutoReconnect) {
-                                _state.value =
-                                    _state.value.copy(
-                                        connectionState = ConnectionState.CONNECTING,
-                                    )
-                                transport.startScanning()
-                            }
-                        }
+                } else if (connState == ConnectionState.DISCONNECTED && shouldAutoReconnect) {
+                    scheduleAutoReconnect()
                 }
             }
         }
@@ -160,9 +144,15 @@ class PttViewModel(
                 }
             },
         )
+
+        // Start scanning immediately on app launch.
+        onConnect()
     }
 
     fun onConnect() {
+        shouldAutoReconnect = true
+        reconnectJob?.cancel()
+        if (_state.value.connectionState != ConnectionState.DISCONNECTED) return
         _state.value = _state.value.copy(connectionState = ConnectionState.CONNECTING)
         transport.startScanning()
     }
@@ -191,6 +181,9 @@ class PttViewModel(
 
     fun onPttRelease() {
         _state.value = _state.value.copy(isPttPressed = false)
+        sessionId?.let { sid ->
+            transport.send(PttMessage.pttEnd(clientId, sid))
+        }
         sttEngine.stopListening()
     }
 
@@ -209,5 +202,20 @@ class PttViewModel(
 
     companion object {
         private const val AUTO_RECONNECT_DELAY_MS = 2000L
+    }
+
+    private fun scheduleAutoReconnect() {
+        if (reconnectJob?.isActive == true) return
+        reconnectJob =
+            viewModelScope.launch {
+                delay(AUTO_RECONNECT_DELAY_MS)
+                if (!shouldAutoReconnect) return@launch
+                if (_state.value.connectionState != ConnectionState.DISCONNECTED) return@launch
+                _state.value =
+                    _state.value.copy(
+                        connectionState = ConnectionState.CONNECTING,
+                    )
+                transport.startScanning()
+            }
     }
 }

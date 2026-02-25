@@ -18,6 +18,7 @@ class BLEPeripheralManager: NSObject {
     var onFinalText: ((String) -> Void)?
     var onPartialText: ((String) -> Void)?
     var onPttStart: ((String) -> Void)?
+    var onPttEnd: ((String) -> Void)?
     var onDeviceConnected: ((ConnectedDevice) -> Void)?
     var onDeviceDisconnected: (() -> Void)?
 
@@ -41,6 +42,9 @@ class BLEPeripheralManager: NSObject {
 
         case .pttStart(let sessionId):
             onPttStart?(sessionId)
+
+        case .pttEnd(let sessionId):
+            onPttEnd?(sessionId)
 
         case .partial(_, _, let text, _):
             onPartialText?(text)

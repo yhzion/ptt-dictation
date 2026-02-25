@@ -25,6 +25,14 @@ class MessageTest {
     }
 
     @Test
+    fun `serialize PTT_END message`() {
+        val msg = PttMessage.pttEnd("phone-01", "s-abc")
+        val str = json.encodeToString(PttMessage.serializer(), msg)
+        assertTrue(str.contains(""""type":"PTT_END""""))
+        assertTrue(str.contains(""""sessionId":"s-abc""""))
+    }
+
+    @Test
     fun `serialize PARTIAL message`() {
         val msg = PttMessage.partial("phone-01", "s-abc", 3, "hello", 0.7)
         val str = json.encodeToString(PttMessage.serializer(), msg)

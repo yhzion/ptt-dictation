@@ -28,4 +28,16 @@ final class BLEPeripheralManagerTests: XCTestCase {
         manager.handleIncomingData(json.data(using: .utf8)!, characteristicUUID: BLEConstants.finalTextCharUUID)
         XCTAssertEqual(receivedText, "test text")
     }
+
+    func testHandlePttEndCallsDelegate() {
+        let manager = BLEPeripheralManager()
+        var receivedSessionId: String?
+        manager.onPttEnd = { sessionId in receivedSessionId = sessionId }
+
+        let json = """
+        {"type":"PTT_END","payload":{"sessionId":"s-1"}}
+        """
+        manager.handleIncomingData(json.data(using: .utf8)!, characteristicUUID: BLEConstants.controlCharUUID)
+        XCTAssertEqual(receivedSessionId, "s-1")
+    }
 }

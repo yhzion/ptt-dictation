@@ -2,11 +2,17 @@
 
 package com.ptt.dictation.ui
 
+import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Build
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -16,6 +22,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,10 +33,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -63,9 +75,37 @@ fun PttScreen(
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
 ) {
-    if (state.connectionState == ConnectionState.CONNECTED) {
-        KeepScreenOn()
+    val context = LocalContext.current
+    var isUpsideDown by remember { mutableStateOf(false) }
+
+    DisposableEffect(Unit) {
+        val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        val gravitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
+
+        val sensorEventListener =
+            object : SensorEventListener {
+                override fun onSensorChanged(event: SensorEvent) {
+                    // y-axis gravity value
+                    val y = event.values[1]
+                    isUpsideDown = y < -4.0f
+                }
+
+                override fun onAccuracyChanged(
+                    sensor: Sensor?,
+                    accuracy: Int,
+                ) {}
+            }
+        sensorManager.registerListener(
+            sensorEventListener,
+            gravitySensor,
+            SensorManager.SENSOR_DELAY_UI,
+        )
+        onDispose {
+            sensorManager.unregisterListener(sensorEventListener)
+        }
     }
+
+    val rotationAngle by animateFloatAsState(targetValue = if (isUpsideDown) 180f else 0f, label = "rotation")
 
     val infiniteTransition = rememberInfiniteTransition(label = "pixelShift")
     val shiftX by infiniteTransition.animateFloat(
@@ -91,12 +131,14 @@ fun PttScreen(
 
     // Outer box: black background always fills screen (no gap during pixel shift)
     Box(
-        modifier = Modifier.fillMaxSize().background(OledColors.background),
+        modifier = Modifier.fillMaxSize().background(OledColors.background).rotate(rotationAngle),
+        contentAlignment = Alignment.BottomCenter,
     ) {
         Column(
             modifier =
                 Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.5f)
                     .offset(
                         x = (shiftX * PIXEL_SHIFT_RANGE_DP / 2).dp,
                         y = (shiftY * PIXEL_SHIFT_RANGE_DP / 2).dp,
@@ -108,13 +150,13 @@ fun PttScreen(
                     Modifier
                         .fillMaxWidth()
                         .height(60.dp)
-                        .then(
+                        .clickable {
                             if (state.connectionState == ConnectionState.CONNECTED) {
-                                Modifier.clickable(onClick = onDisconnect)
+                                onDisconnect()
                             } else {
-                                Modifier
-                            },
-                        ),
+                                onConnect()
+                            }
+                        },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -154,7 +196,6 @@ fun PttScreen(
                 else -> {
                     DisconnectedContent(
                         connectionState = state.connectionState,
-                        onConnect = onConnect,
                     )
                 }
             }
@@ -163,45 +204,25 @@ fun PttScreen(
 }
 
 @Composable
-private fun KeepScreenOn() {
-    val view = LocalView.current
-    DisposableEffect(Unit) {
-        view.keepScreenOn = true
-        onDispose {
-            view.keepScreenOn = false
-        }
-    }
-}
-
-@Composable
-private fun DisconnectedContent(
-    connectionState: ConnectionState,
-    onConnect: () -> Unit,
-) {
+private fun DisconnectedContent(connectionState: ConnectionState) {
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        if (connectionState == ConnectionState.DISCONNECTED) {
-            Box(
-                modifier =
-                    Modifier
-                        .border(1.dp, OledColors.textMuted, RoundedCornerShape(100.dp))
-                        .clickable(onClick = onConnect)
-                        .padding(horizontal = 40.dp, vertical = 16.dp)
-                        .testTag("connect-button"),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "Scan",
-                    color = OledColors.textBright,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Light,
-                    letterSpacing = 1.sp,
-                )
-            }
-        }
+        Text(
+            text =
+                if (connectionState == ConnectionState.CONNECTING) {
+                    "Searching nearby desktop..."
+                } else {
+                    "Auto reconnect enabled"
+                },
+            color = OledColors.textSecondary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Light,
+            letterSpacing = 0.5.sp,
+            modifier = Modifier.testTag("auto-reconnect-hint"),
+        )
     }
 }
 

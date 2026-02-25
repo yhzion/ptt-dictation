@@ -3,6 +3,7 @@ import Foundation
 enum BLEMessage {
     case hello(deviceModel: String, engine: String)
     case pttStart(sessionId: String)
+    case pttEnd(sessionId: String)
     case partial(sessionId: String, seq: Int, text: String, confidence: Double)
     case final(sessionId: String, text: String, confidence: Double)
 
@@ -22,6 +23,8 @@ enum BLEMessage {
             )
         case "PTT_START":
             return .pttStart(sessionId: payload["sessionId"] as! String)
+        case "PTT_END":
+            return .pttEnd(sessionId: payload["sessionId"] as! String)
         case "PARTIAL":
             return .partial(
                 sessionId: payload["sessionId"] as! String,
