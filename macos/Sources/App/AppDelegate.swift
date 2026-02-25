@@ -7,12 +7,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var deviceMenuItem: NSMenuItem!
     private var isDeviceConnected = false
+    private var connectedDevice: ConnectedDevice?
     private var preferencesWindow: PreferencesWindow?
     private var pttActiveWatchdog: DispatchWorkItem?
     private var isPttActive = false
     private var lastPttActivityAt: Date?
 
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(preferencesDidChange),
+            name: .preferencesDidChange,
+            object: nil
+        )
         setupStatusItem()
         setupBLE()
     }
@@ -41,8 +52,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         bleManager.onDeviceConnected = { [weak self] device in
             DispatchQueue.main.async {
                 self?.isDeviceConnected = true
-                self?.updateStatusIcon(dotColor: .systemGreen)
-                self?.deviceMenuItem.title = "\(device.deviceModel) — Connected"
+                self?.connectedDevice = device
+                self?.refreshStatusIcon()
+                self?.updateDeviceMenuTitle()
             }
         }
 
@@ -50,8 +62,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 self?.cancelPttWatchdog()
                 self?.isDeviceConnected = false
-                self?.updateStatusIcon(dotColor: nil)
-                self?.deviceMenuItem.title = "No devices connected"
+                self?.connectedDevice = nil
+                self?.refreshStatusIcon()
+                self?.updateDeviceMenuTitle()
             }
         }
 
@@ -98,10 +111,39 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             accessibilityDescription: "PTT Dictation"
         ) else { return }
 
-        if let color = dotColor {
+        if let color = dotColor, Preferences.shared.showStatusDot {
             statusItem.button?.image = statusBarIcon(base: baseImage, dotColor: color)
         } else {
             statusItem.button?.image = baseImage
+        }
+    }
+
+    private func currentDotColor() -> NSColor? {
+        guard isDeviceConnected else { return nil }
+        return isPttActive ? .systemRed : .systemGreen
+    }
+
+    private func refreshStatusIcon() {
+        updateStatusIcon(dotColor: currentDotColor())
+    }
+
+    @objc private func preferencesDidChange(_ notification: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            self?.refreshStatusIcon()
+            self?.updateDeviceMenuTitle()
+        }
+    }
+
+    private func updateDeviceMenuTitle() {
+        guard isDeviceConnected, let device = connectedDevice else {
+            deviceMenuItem.title = "No devices connected"
+            return
+        }
+
+        if Preferences.shared.showConnectionDetails, !device.engine.isEmpty {
+            deviceMenuItem.title = "\(device.deviceModel) (\(device.engine)) — Connected"
+        } else {
+            deviceMenuItem.title = "\(device.deviceModel) — Connected"
         }
     }
 
@@ -132,7 +174,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func setPttActive() {
         isPttActive = true
         lastPttActivityAt = Date()
-        updateStatusIcon(dotColor: .systemRed)
+        refreshStatusIcon()
         schedulePttWatchdog()
     }
 
@@ -140,11 +182,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         isPttActive = false
         lastPttActivityAt = nil
         cancelPttWatchdog()
-        if isDeviceConnected {
-            updateStatusIcon(dotColor: .systemGreen)
-        } else {
-            updateStatusIcon(dotColor: nil)
-        }
+        refreshStatusIcon()
     }
 
     private func notePttActivity() {
