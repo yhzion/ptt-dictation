@@ -658,8 +658,8 @@ class BleCentralClient(
         private const val ATT_HEADER_BYTES = 3
 
         private const val MAX_WRITE_RETRY = 3
-        private const val WRITE_RETRY_DELAY_MS = 60L
-        private const val NO_RESPONSE_WRITE_INTERVAL_MS = 20L
+        private const val WRITE_RETRY_DELAY_MS = 30L
+        private const val NO_RESPONSE_WRITE_INTERVAL_MS = 10L
 
         private val CLIENT_CHARACTERISTIC_CONFIG_UUID: UUID =
             UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")

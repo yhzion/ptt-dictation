@@ -7,14 +7,18 @@ import com.ptt.dictation.ble.ConnectionState
 import com.ptt.dictation.ble.PttTransport
 import com.ptt.dictation.ble.PttTransportListener
 import com.ptt.dictation.model.PttMessage
+import com.ptt.dictation.rules.NoopTextRuleService
+import com.ptt.dictation.rules.TextRuleService
 import com.ptt.dictation.stt.STTEngine
 import com.ptt.dictation.stt.STTListener
 import com.ptt.dictation.stt.ThrottleDeduper
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -25,6 +29,7 @@ data class PttUiState(
     val isPttPressed: Boolean = false,
     val mode: PttMode = PttMode.IDLE,
     val partialText: String = "",
+    val recognitionHapticTick: Int = 0,
 ) {
     val canPtt: Boolean get() = connectionState == ConnectionState.CONNECTED
 }
@@ -33,18 +38,23 @@ class PttViewModel(
     private val transport: PttTransport,
     private val sttEngine: STTEngine,
     private val clientId: String = "android-${UUID.randomUUID().toString().take(8)}",
+    private val textRuleService: TextRuleService = NoopTextRuleService(),
 ) : ViewModel() {
     private val _state = MutableStateFlow(PttUiState())
     val state: StateFlow<PttUiState> = _state.asStateFlow()
 
-    private val throttleDeduper = ThrottleDeduper(intervalMs = 200)
+    private val throttleDeduper = ThrottleDeduper(intervalMs = PARTIAL_EMIT_INTERVAL_MS)
     private var sessionId: String? = null
     private var partialSeq = 0
     private var shouldAutoReconnect = true
     private var reconnectJob: Job? = null
+    private var ruleSyncJob: Job? = null
     private val accumulatedText = StringBuilder()
+    private var hasRecognitionHapticFired = false
 
     init {
+        bootstrapRuleService()
+
         transport.setListener(
             object : PttTransportListener {
                 override fun onConnected() {
@@ -79,10 +89,12 @@ class PttViewModel(
                     if (throttleDeduper.shouldEmit(text)) {
                         partialSeq++
                         val fullText = accumulatedText.toString() + text
-                        _state.value = _state.value.copy(partialText = fullText)
+                        val transformedText = textRuleService.apply(fullText)
+                        _state.value = _state.value.copy(partialText = transformedText)
+                        fireRecognitionHapticIfNeeded(transformedText)
                         sessionId?.let { sid ->
                             transport.send(
-                                PttMessage.partial(clientId, sid, partialSeq, fullText, 0.5),
+                                PttMessage.partial(clientId, sid, partialSeq, transformedText, 0.5),
                             )
                         }
                     }
@@ -93,14 +105,17 @@ class PttViewModel(
                         // Still holding — accumulate and restart STT
                         if (accumulatedText.isNotEmpty()) accumulatedText.append(" ")
                         accumulatedText.append(text)
+                        val transformedText = textRuleService.apply(accumulatedText.toString())
                         _state.value =
-                            _state.value.copy(partialText = accumulatedText.toString())
+                            _state.value.copy(partialText = transformedText)
+                        fireRecognitionHapticIfNeeded(transformedText)
                         sttEngine.startListening()
                     } else {
                         // Released — send accumulated FINAL
                         if (accumulatedText.isNotEmpty()) accumulatedText.append(" ")
                         accumulatedText.append(text)
-                        val finalText = accumulatedText.toString()
+                        val finalText = textRuleService.apply(accumulatedText.toString())
+                        fireRecognitionHapticIfNeeded(finalText)
                         _state.value =
                             _state.value.copy(
                                 partialText = "",
@@ -125,7 +140,7 @@ class PttViewModel(
                         sttEngine.startListening()
                     } else {
                         // Released — send accumulated text if any
-                        val finalText = accumulatedText.toString()
+                        val finalText = textRuleService.apply(accumulatedText.toString())
                         if (finalText.isNotEmpty()) {
                             sessionId?.let { sid ->
                                 transport.send(
@@ -169,6 +184,7 @@ class PttViewModel(
         partialSeq = 0
         throttleDeduper.reset()
         accumulatedText.clear()
+        hasRecognitionHapticFired = false
         _state.value =
             _state.value.copy(
                 isPttPressed = true,
@@ -189,19 +205,28 @@ class PttViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        ruleSyncJob?.cancel()
         transport.disconnect()
     }
 
     class Factory(
         private val transport: PttTransport,
         private val sttEngine: STTEngine,
+        private val textRuleService: TextRuleService = NoopTextRuleService(),
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T = PttViewModel(transport, sttEngine) as T
+        override fun <T : ViewModel> create(modelClass: Class<T>): T =
+            PttViewModel(
+                transport = transport,
+                sttEngine = sttEngine,
+                textRuleService = textRuleService,
+            ) as T
     }
 
     companion object {
         private const val AUTO_RECONNECT_DELAY_MS = 2000L
+        private const val PARTIAL_EMIT_INTERVAL_MS = 100L
+        private const val RULE_SYNC_INTERVAL_MS = 300_000L
     }
 
     private fun scheduleAutoReconnect() {
@@ -216,6 +241,35 @@ class PttViewModel(
                         connectionState = ConnectionState.CONNECTING,
                     )
                 transport.startScanning()
+            }
+    }
+
+    private fun fireRecognitionHapticIfNeeded(text: String) {
+        if (hasRecognitionHapticFired) return
+        if (text.isBlank()) return
+        hasRecognitionHapticFired = true
+        _state.value =
+            _state.value.copy(
+                recognitionHapticTick = _state.value.recognitionHapticTick + 1,
+            )
+    }
+
+    private fun bootstrapRuleService() {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                textRuleService.initialize()
+                textRuleService.syncFromServerIfNeeded()
+            }
+        }
+
+        ruleSyncJob =
+            viewModelScope.launch(Dispatchers.IO) {
+                while (isActive) {
+                    delay(RULE_SYNC_INTERVAL_MS)
+                    runCatching {
+                        textRuleService.syncFromServerIfNeeded()
+                    }
+                }
             }
     }
 }

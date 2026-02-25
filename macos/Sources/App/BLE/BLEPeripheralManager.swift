@@ -41,16 +41,25 @@ class BLEPeripheralManager: NSObject {
 
         switch message {
         case .hello(let deviceModel, let engine):
-            let device = ConnectedDevice(deviceModel: deviceModel, engine: engine, connectedAt: Date())
             if let centralId {
                 subscribedCentrals.insert(centralId)
-                let isNewCentral = devicesByCentral[centralId] == nil
+                let previous = devicesByCentral[centralId]
+                let device = ConnectedDevice(
+                    deviceModel: deviceModel,
+                    engine: engine,
+                    connectedAt: previous?.connectedAt ?? Date()
+                )
+                let shouldNotify =
+                    previous == nil ||
+                    previous?.deviceModel != deviceModel ||
+                    previous?.engine != engine
                 devicesByCentral[centralId] = device
                 connectedDevices = Array(devicesByCentral.values)
-                if isNewCentral {
+                if shouldNotify {
                     onDeviceConnected?(device)
                 }
             } else {
+                let device = ConnectedDevice(deviceModel: deviceModel, engine: engine, connectedAt: Date())
                 connectedDevices = [device]
                 onDeviceConnected?(device)
             }
@@ -72,7 +81,21 @@ class BLEPeripheralManager: NSObject {
         }
     }
 
-    private func handleCentralDisconnected(_ centralId: UUID) {
+    func handleCentralSubscribed(_ centralId: UUID) {
+        subscribedCentrals.insert(centralId)
+        guard devicesByCentral[centralId] == nil else { return }
+
+        let placeholder = ConnectedDevice(
+            deviceModel: Self.unknownDeviceModel,
+            engine: "",
+            connectedAt: Date()
+        )
+        devicesByCentral[centralId] = placeholder
+        connectedDevices = Array(devicesByCentral.values)
+        onDeviceConnected?(placeholder)
+    }
+
+    func handleCentralDisconnected(_ centralId: UUID) {
         subscribedCentrals.remove(centralId)
         devicesByCentral.removeValue(forKey: centralId)
         connectedDevices = Array(devicesByCentral.values)
@@ -150,11 +173,13 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
 
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didSubscribeTo characteristic: CBCharacteristic) {
         guard characteristic.uuid == BLEConstants.statusCharUUID else { return }
-        subscribedCentrals.insert(central.identifier)
+        handleCentralSubscribed(central.identifier)
     }
 
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom characteristic: CBCharacteristic) {
         guard characteristic.uuid == BLEConstants.statusCharUUID else { return }
         handleCentralDisconnected(central.identifier)
     }
+
+    private static let unknownDeviceModel = "Unknown device"
 }

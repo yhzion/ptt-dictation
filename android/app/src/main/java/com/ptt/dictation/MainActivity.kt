@@ -16,6 +16,13 @@ import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import com.ptt.dictation.ble.BleCentralClient
+import com.ptt.dictation.rules.DbBackedTextRuleService
+import com.ptt.dictation.rules.HttpRuleSyncApi
+import com.ptt.dictation.rules.NoopRuleSyncApi
+import com.ptt.dictation.rules.RuleSyncApi
+import com.ptt.dictation.rules.RuleSyncManager
+import com.ptt.dictation.rules.SqliteRuleStore
+import com.ptt.dictation.rules.TextRuleService
 import com.ptt.dictation.service.PttForegroundService
 import com.ptt.dictation.stt.SpeechRecognizerSTTEngine
 import com.ptt.dictation.ui.PttScreen
@@ -71,7 +78,8 @@ class MainActivity : ComponentActivity() {
 
         val transport = BleCentralClient(context = this, clientId = "android-${Build.MODEL}", deviceModel = Build.MODEL)
         val sttEngine = SpeechRecognizerSTTEngine(this)
-        val factory = PttViewModel.Factory(transport, sttEngine)
+        val textRuleService = createTextRuleService()
+        val factory = PttViewModel.Factory(transport, sttEngine, textRuleService)
         viewModel = ViewModelProvider(this, factory)[PttViewModel::class.java]
 
         setContent {
@@ -86,5 +94,20 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    private fun createTextRuleService(): TextRuleService {
+        val store = SqliteRuleStore(applicationContext)
+        val syncApi: RuleSyncApi =
+            if (BuildConfig.RULE_SYNC_BASE_URL.isBlank()) {
+                NoopRuleSyncApi()
+            } else {
+                HttpRuleSyncApi(BuildConfig.RULE_SYNC_BASE_URL)
+            }
+        val syncManager = RuleSyncManager(store = store, syncApi = syncApi)
+        return DbBackedTextRuleService(
+            store = store,
+            syncManager = syncManager,
+        )
     }
 }
