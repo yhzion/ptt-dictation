@@ -11,6 +11,8 @@ class BLEPeripheralManager: NSObject {
     private var peripheralManager: CBPeripheralManager?
     private var service: CBMutableService?
     private var statusCharacteristic: CBMutableCharacteristic?
+    private var subscribedCentrals: Set<UUID> = []
+    private var devicesByCentral: [UUID: ConnectedDevice] = [:]
 
     private(set) var connectedDevices: [ConnectedDevice] = []
     private(set) var isAdvertising = false
@@ -28,17 +30,30 @@ class BLEPeripheralManager: NSObject {
 
     func stopAdvertising() {
         peripheralManager?.stopAdvertising()
+        subscribedCentrals.removeAll()
+        devicesByCentral.removeAll()
+        connectedDevices.removeAll()
         isAdvertising = false
     }
 
-    func handleIncomingData(_ data: Data, characteristicUUID: CBUUID) {
+    func handleIncomingData(_ data: Data, characteristicUUID: CBUUID, centralId: UUID? = nil) {
         guard let message = try? BLEMessage.decode(from: data) else { return }
 
         switch message {
         case .hello(let deviceModel, let engine):
             let device = ConnectedDevice(deviceModel: deviceModel, engine: engine, connectedAt: Date())
-            connectedDevices.append(device)
-            onDeviceConnected?(device)
+            if let centralId {
+                subscribedCentrals.insert(centralId)
+                let isNewCentral = devicesByCentral[centralId] == nil
+                devicesByCentral[centralId] = device
+                connectedDevices = Array(devicesByCentral.values)
+                if isNewCentral {
+                    onDeviceConnected?(device)
+                }
+            } else {
+                connectedDevices = [device]
+                onDeviceConnected?(device)
+            }
 
         case .pttStart(let sessionId):
             onPttStart?(sessionId)
@@ -54,6 +69,16 @@ class BLEPeripheralManager: NSObject {
 
         default:
             break
+        }
+    }
+
+    private func handleCentralDisconnected(_ centralId: UUID) {
+        subscribedCentrals.remove(centralId)
+        devicesByCentral.removeValue(forKey: centralId)
+        connectedDevices = Array(devicesByCentral.values)
+
+        if connectedDevices.isEmpty {
+            onDeviceDisconnected?()
         }
     }
 
@@ -98,7 +123,15 @@ class BLEPeripheralManager: NSObject {
 
 extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
-        guard peripheral.state == .poweredOn else { return }
+        guard peripheral.state == .poweredOn else {
+            subscribedCentrals.removeAll()
+            devicesByCentral.removeAll()
+            if !connectedDevices.isEmpty {
+                connectedDevices.removeAll()
+                onDeviceDisconnected?()
+            }
+            return
+        }
         setupService()
         peripheral.startAdvertising([
             CBAdvertisementDataServiceUUIDsKey: [BLEConstants.serviceUUID],
@@ -110,8 +143,18 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
         for request in requests {
             guard let data = request.value else { continue }
-            handleIncomingData(data, characteristicUUID: request.characteristic.uuid)
+            handleIncomingData(data, characteristicUUID: request.characteristic.uuid, centralId: request.central.identifier)
             peripheral.respond(to: request, withResult: .success)
         }
+    }
+
+    func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didSubscribeTo characteristic: CBCharacteristic) {
+        guard characteristic.uuid == BLEConstants.statusCharUUID else { return }
+        subscribedCentrals.insert(central.identifier)
+    }
+
+    func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom characteristic: CBCharacteristic) {
+        guard characteristic.uuid == BLEConstants.statusCharUUID else { return }
+        handleCentralDisconnected(central.identifier)
     }
 }

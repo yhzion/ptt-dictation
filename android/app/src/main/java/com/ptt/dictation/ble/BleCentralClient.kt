@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothStatusCodes
@@ -44,6 +45,18 @@ class BleCentralClient(
     private var partialTextChar: BluetoothGattCharacteristic? = null
     private var finalTextChar: BluetoothGattCharacteristic? = null
     private var deviceInfoChar: BluetoothGattCharacteristic? = null
+    private var statusChar: BluetoothGattCharacteristic? = null
+
+    private var preferredDeviceAddress: String? = null
+    private var scanInProgress = false
+    private var connectAttemptInProgress = false
+    private var manualDisconnectRequested = false
+
+    private var negotiatedMtu = DEFAULT_MTU
+    private var waitingForMtu = false
+
+    private var keepaliveConsecutiveFailures = 0
+    private var keepaliveAwaitingResponse = false
 
     private data class PendingWrite(
         val messageType: String,
@@ -56,17 +69,30 @@ class BleCentralClient(
     private val writeQueue = ArrayDeque<PendingWrite>()
     private var writeInFlight = false
     private var inflightWrite: PendingWrite? = null
-    private var negotiatedMtu = DEFAULT_MTU
-    private var waitingForMtu = false
 
     private val handler = Handler(Looper.getMainLooper())
-    private val scanTimeoutRunnable: Runnable =
+
+    private val scanTimeoutRunnable =
         Runnable {
-            bluetoothAdapter.bluetoothLeScanner?.stopScan(scanCallback)
+            stopScanIfNeeded()
             if (_connectionState.value != ConnectionState.CONNECTED) {
-                _connectionState.value = ConnectionState.DISCONNECTED
+                setDisconnected(notifyListener = false)
             }
         }
+
+    private val connectTimeoutRunnable =
+        Runnable {
+            if (!connectAttemptInProgress || _connectionState.value == ConnectionState.CONNECTED) {
+                return@Runnable
+            }
+            Log.w(TAG, "Connect timeout; falling back to scan")
+            connectAttemptInProgress = false
+            bluetoothGatt?.disconnect()
+            clearGattState(closeGatt = true)
+            startScanInternal()
+        }
+
+    private val keepaliveRunnable = Runnable { performKeepaliveCheck() }
     private val drainQueueRunnable = Runnable { drainWriteQueue() }
 
     override fun setListener(listener: PttTransportListener) {
@@ -74,43 +100,35 @@ class BleCentralClient(
     }
 
     override fun startScanning() {
-        // Clean up stale GATT/write state from previous session.
+        manualDisconnectRequested = false
+        stopKeepalive()
         clearWriteState()
-        bluetoothGatt?.close()
-        bluetoothGatt = null
-        negotiatedMtu = DEFAULT_MTU
-        waitingForMtu = false
+        stopScanIfNeeded()
 
-        val scanner = bluetoothAdapter.bluetoothLeScanner ?: return
-        val filter =
-            ScanFilter.Builder()
-                .setServiceUuid(ParcelUuid(BLEConstants.SERVICE_UUID))
-                .build()
-        val settings =
-            ScanSettings.Builder()
-                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-                .build()
-        handler.removeCallbacks(scanTimeoutRunnable)
-        scanner.startScan(listOf(filter), settings, scanCallback)
-        handler.postDelayed(scanTimeoutRunnable, SCAN_TIMEOUT_MS)
+        if (attemptDirectReconnect()) {
+            return
+        }
+        startScanInternal()
     }
 
     override fun connect(deviceId: String) {
-        _connectionState.value = ConnectionState.CONNECTING
-        val device = bluetoothAdapter.getRemoteDevice(deviceId)
-        bluetoothGatt = device.connectGatt(context, false, gattCallback)
+        manualDisconnectRequested = false
+        if (!connectToDevice(deviceId)) {
+            setDisconnected(notifyListener = false)
+            listener?.onError("Failed to connect target device: $deviceId")
+        }
     }
 
     override fun disconnect() {
-        handler.removeCallbacks(scanTimeoutRunnable)
-        handler.removeCallbacks(drainQueueRunnable)
+        manualDisconnectRequested = true
+        handler.removeCallbacks(connectTimeoutRunnable)
+        stopScanIfNeeded()
+        stopKeepalive()
         clearWriteState()
         bluetoothGatt?.disconnect()
-        bluetoothGatt?.close()
-        bluetoothGatt = null
-        negotiatedMtu = DEFAULT_MTU
-        waitingForMtu = false
-        _connectionState.value = ConnectionState.DISCONNECTED
+        clearGattState(closeGatt = true)
+        connectAttemptInProgress = false
+        setDisconnected(notifyListener = false)
     }
 
     override fun send(message: PttMessage) {
@@ -145,8 +163,194 @@ class BleCentralClient(
         )
     }
 
+    private fun attemptDirectReconnect(): Boolean {
+        val address = preferredDeviceAddress ?: return false
+        return connectToDevice(address)
+    }
+
+    private fun connectToDevice(deviceId: String): Boolean {
+        val device =
+            try {
+                bluetoothAdapter.getRemoteDevice(deviceId)
+            } catch (e: IllegalArgumentException) {
+                Log.w(TAG, "Invalid bluetooth address: $deviceId", e)
+                null
+            }
+
+        if (device == null) {
+            return false
+        }
+
+        handler.removeCallbacks(scanTimeoutRunnable)
+        handler.removeCallbacks(connectTimeoutRunnable)
+        stopScanIfNeeded()
+        clearGattState(closeGatt = true)
+
+        _connectionState.value = ConnectionState.CONNECTING
+        connectAttemptInProgress = true
+        preferredDeviceAddress = deviceId
+        bluetoothGatt = device.connectGatt(context, false, gattCallback)
+        handler.postDelayed(connectTimeoutRunnable, CONNECT_TIMEOUT_MS)
+        return true
+    }
+
+    private fun startScanInternal() {
+        val scanner = bluetoothAdapter.bluetoothLeScanner
+        if (scanner == null) {
+            setDisconnected(notifyListener = false)
+            listener?.onError("Bluetooth LE scanner unavailable")
+            Log.w(TAG, "Cannot start scan: Bluetooth LE scanner unavailable")
+            return
+        }
+
+        _connectionState.value = ConnectionState.CONNECTING
+        val filter =
+            ScanFilter.Builder()
+                .setServiceUuid(ParcelUuid(BLEConstants.SERVICE_UUID))
+                .build()
+        val settings =
+            ScanSettings.Builder()
+                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                .build()
+
+        handler.removeCallbacks(scanTimeoutRunnable)
+        try {
+            scanner.startScan(listOf(filter), settings, scanCallback)
+            scanInProgress = true
+        } catch (e: SecurityException) {
+            setDisconnected(notifyListener = false)
+            listener?.onError("BLE scan permission denied")
+            Log.w(TAG, "Cannot start scan: missing permission", e)
+            return
+        } catch (e: IllegalStateException) {
+            setDisconnected(notifyListener = false)
+            listener?.onError("Bluetooth adapter is not ready")
+            Log.w(TAG, "Cannot start scan: adapter state invalid", e)
+            return
+        }
+
+        handler.postDelayed(scanTimeoutRunnable, SCAN_TIMEOUT_MS)
+    }
+
+    private fun stopScanIfNeeded() {
+        handler.removeCallbacks(scanTimeoutRunnable)
+        if (!scanInProgress) return
+        bluetoothAdapter.bluetoothLeScanner?.stopScan(scanCallback)
+        scanInProgress = false
+    }
+
     private fun sendHello() {
         send(PttMessage.hello(clientId, deviceModel, "Google"))
+    }
+
+    private fun enableStatusNotifications(gatt: BluetoothGatt) {
+        val status = statusChar ?: return
+
+        val notificationEnabled = gatt.setCharacteristicNotification(status, true)
+        if (!notificationEnabled) {
+            Log.w(TAG, "Failed to enable local notification state for status characteristic")
+            return
+        }
+
+        val descriptor = status.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG_UUID)
+        if (descriptor == null) {
+            Log.w(TAG, "CCCD descriptor missing on status characteristic")
+            return
+        }
+
+        val writeAccepted =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                gatt.writeDescriptor(
+                    descriptor,
+                    BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE,
+                ) == BluetoothStatusCodes.SUCCESS
+            } else {
+                @Suppress("DEPRECATION")
+                descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                @Suppress("DEPRECATION")
+                gatt.writeDescriptor(descriptor)
+            }
+
+        if (!writeAccepted) {
+            Log.w(TAG, "Failed to write CCCD for status notifications")
+        }
+    }
+
+    private fun startKeepalive() {
+        keepaliveConsecutiveFailures = 0
+        keepaliveAwaitingResponse = false
+        handler.removeCallbacks(keepaliveRunnable)
+        handler.postDelayed(keepaliveRunnable, KEEPALIVE_INTERVAL_MS)
+    }
+
+    private fun stopKeepalive() {
+        handler.removeCallbacks(keepaliveRunnable)
+        keepaliveConsecutiveFailures = 0
+        keepaliveAwaitingResponse = false
+    }
+
+    private fun performKeepaliveCheck() {
+        if (_connectionState.value != ConnectionState.CONNECTED) return
+
+        val gatt = bluetoothGatt
+        if (gatt == null) {
+            registerKeepaliveFailure("gatt missing")
+            scheduleNextKeepaliveIfConnected()
+            return
+        }
+
+        if (keepaliveAwaitingResponse) {
+            registerKeepaliveFailure("previous keepalive timed out")
+            if (_connectionState.value != ConnectionState.CONNECTED) return
+        }
+
+        val started =
+            try {
+                gatt.readRemoteRssi()
+            } catch (e: Exception) {
+                Log.w(TAG, "keepalive readRemoteRssi error", e)
+                false
+            }
+
+        if (started) {
+            keepaliveAwaitingResponse = true
+        } else {
+            registerKeepaliveFailure("readRemoteRssi dispatch failed")
+            if (_connectionState.value != ConnectionState.CONNECTED) return
+        }
+
+        scheduleNextKeepaliveIfConnected()
+    }
+
+    private fun scheduleNextKeepaliveIfConnected() {
+        if (_connectionState.value != ConnectionState.CONNECTED) return
+        handler.postDelayed(keepaliveRunnable, KEEPALIVE_INTERVAL_MS)
+    }
+
+    private fun registerKeepaliveFailure(reason: String) {
+        keepaliveAwaitingResponse = false
+        keepaliveConsecutiveFailures++
+        Log.w(
+            TAG,
+            "Keepalive failure $keepaliveConsecutiveFailures/$KEEPALIVE_FAILURE_THRESHOLD: $reason",
+        )
+
+        if (keepaliveConsecutiveFailures >= KEEPALIVE_FAILURE_THRESHOLD) {
+            forceDisconnectDueToHealth(reason)
+        }
+    }
+
+    private fun forceDisconnectDueToHealth(reason: String) {
+        Log.w(TAG, "Force disconnect due to keepalive health check: $reason")
+        manualDisconnectRequested = false
+        handler.removeCallbacks(connectTimeoutRunnable)
+        stopScanIfNeeded()
+        stopKeepalive()
+        clearWriteState()
+        bluetoothGatt?.disconnect()
+        clearGattState(closeGatt = true)
+        connectAttemptInProgress = false
+        setDisconnected(notifyListener = true)
     }
 
     private fun maxPayloadBytes(): Int = (negotiatedMtu - ATT_HEADER_BYTES).coerceAtLeast(20)
@@ -261,15 +465,43 @@ class BleCentralClient(
         inflightWrite = null
     }
 
+    private fun clearGattState(closeGatt: Boolean) {
+        if (closeGatt) {
+            bluetoothGatt?.close()
+        }
+        bluetoothGatt = null
+        controlChar = null
+        partialTextChar = null
+        finalTextChar = null
+        deviceInfoChar = null
+        statusChar = null
+        negotiatedMtu = DEFAULT_MTU
+        waitingForMtu = false
+    }
+
+    private fun setDisconnected(notifyListener: Boolean) {
+        val wasDisconnected = _connectionState.value == ConnectionState.DISCONNECTED
+        _connectionState.value = ConnectionState.DISCONNECTED
+        if (notifyListener && !wasDisconnected) {
+            listener?.onDisconnected()
+        }
+    }
+
     private val scanCallback =
         object : ScanCallback() {
             override fun onScanResult(
                 callbackType: Int,
                 result: ScanResult,
             ) {
-                handler.removeCallbacks(scanTimeoutRunnable)
-                bluetoothAdapter.bluetoothLeScanner?.stopScan(this)
-                connect(result.device.address)
+                stopScanIfNeeded()
+                connectToDevice(result.device.address)
+            }
+
+            override fun onScanFailed(errorCode: Int) {
+                scanInProgress = false
+                setDisconnected(notifyListener = false)
+                listener?.onError("BLE scan failed: $errorCode")
+                Log.w(TAG, "BLE scan failed with code=$errorCode")
             }
         }
 
@@ -282,6 +514,11 @@ class BleCentralClient(
             ) {
                 when (newState) {
                     BluetoothProfile.STATE_CONNECTED -> {
+                        connectAttemptInProgress = false
+                        manualDisconnectRequested = false
+                        handler.removeCallbacks(connectTimeoutRunnable)
+                        stopScanIfNeeded()
+
                         clearWriteState()
                         negotiatedMtu = DEFAULT_MTU
                         waitingForMtu = false
@@ -294,18 +531,25 @@ class BleCentralClient(
                             gatt.discoverServices()
                         }
                     }
+
                     BluetoothProfile.STATE_DISCONNECTED -> {
+                        val wasManual = manualDisconnectRequested
+                        val hadConnectAttempt = connectAttemptInProgress
+
+                        connectAttemptInProgress = false
+                        manualDisconnectRequested = false
+                        handler.removeCallbacks(connectTimeoutRunnable)
+
+                        stopKeepalive()
                         clearWriteState()
-                        bluetoothGatt?.close()
-                        bluetoothGatt = null
-                        controlChar = null
-                        partialTextChar = null
-                        finalTextChar = null
-                        deviceInfoChar = null
-                        negotiatedMtu = DEFAULT_MTU
-                        waitingForMtu = false
-                        _connectionState.value = ConnectionState.DISCONNECTED
-                        listener?.onDisconnected()
+                        clearGattState(closeGatt = true)
+
+                        if (hadConnectAttempt && !wasManual) {
+                            startScanInternal()
+                            return
+                        }
+
+                        setDisconnected(notifyListener = !wasManual)
                     }
                 }
             }
@@ -330,17 +574,54 @@ class BleCentralClient(
                 gatt: BluetoothGatt,
                 status: Int,
             ) {
-                if (status != BluetoothGatt.GATT_SUCCESS) return
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    forceDisconnectDueToHealth("service discovery failed status=$status")
+                    return
+                }
 
-                val service = gatt.getService(BLEConstants.SERVICE_UUID) ?: return
+                val service = gatt.getService(BLEConstants.SERVICE_UUID)
+                if (service == null) {
+                    forceDisconnectDueToHealth("service missing")
+                    return
+                }
+
                 controlChar = service.getCharacteristic(BLEConstants.CONTROL_CHAR_UUID)
                 partialTextChar = service.getCharacteristic(BLEConstants.PARTIAL_TEXT_CHAR_UUID)
                 finalTextChar = service.getCharacteristic(BLEConstants.FINAL_TEXT_CHAR_UUID)
                 deviceInfoChar = service.getCharacteristic(BLEConstants.DEVICE_INFO_CHAR_UUID)
+                statusChar = service.getCharacteristic(BLEConstants.STATUS_CHAR_UUID)
+
+                enableStatusNotifications(gatt)
 
                 _connectionState.value = ConnectionState.CONNECTED
                 listener?.onConnected()
                 sendHello()
+                startKeepalive()
+            }
+
+            override fun onDescriptorWrite(
+                gatt: BluetoothGatt,
+                descriptor: BluetoothGattDescriptor,
+                status: Int,
+            ) {
+                if (descriptor.characteristic.uuid == BLEConstants.STATUS_CHAR_UUID &&
+                    status != BluetoothGatt.GATT_SUCCESS
+                ) {
+                    Log.w(TAG, "Status notification descriptor write failed: status=$status")
+                }
+            }
+
+            override fun onReadRemoteRssi(
+                gatt: BluetoothGatt,
+                rssi: Int,
+                status: Int,
+            ) {
+                keepaliveAwaitingResponse = false
+                if (status == BluetoothGatt.GATT_SUCCESS) {
+                    keepaliveConsecutiveFailures = 0
+                } else {
+                    registerKeepaliveFailure("readRemoteRssi status=$status")
+                }
             }
 
             override fun onCharacteristicWrite(
@@ -365,12 +646,22 @@ class BleCentralClient(
 
     companion object {
         private const val TAG = "BleCentralClient"
+
         private const val SCAN_TIMEOUT_MS = 10_000L
+        private const val CONNECT_TIMEOUT_MS = 8_000L
+
+        private const val KEEPALIVE_INTERVAL_MS = 12_000L
+        private const val KEEPALIVE_FAILURE_THRESHOLD = 3
+
         private const val TARGET_MTU = 512
         private const val DEFAULT_MTU = 23
         private const val ATT_HEADER_BYTES = 3
+
         private const val MAX_WRITE_RETRY = 3
         private const val WRITE_RETRY_DELAY_MS = 60L
         private const val NO_RESPONSE_WRITE_INTERVAL_MS = 20L
+
+        private val CLIENT_CHARACTERISTIC_CONFIG_UUID: UUID =
+            UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     }
 }

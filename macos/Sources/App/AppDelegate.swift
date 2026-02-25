@@ -9,6 +9,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var isDeviceConnected = false
     private var preferencesWindow: PreferencesWindow?
     private var pttActiveWatchdog: DispatchWorkItem?
+    private var isPttActive = false
+    private var lastPttActivityAt: Date?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusItem()
@@ -56,6 +58,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         bleManager.onPttStart = { [weak self] _ in
             DispatchQueue.main.async {
                 self?.setPttActive()
+            }
+        }
+
+        bleManager.onPartialText = { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.notePttActivity()
             }
         }
 
@@ -122,11 +130,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setPttActive() {
+        isPttActive = true
+        lastPttActivityAt = Date()
         updateStatusIcon(dotColor: .systemRed)
         schedulePttWatchdog()
     }
 
     private func setPttInactive() {
+        isPttActive = false
+        lastPttActivityAt = nil
         cancelPttWatchdog()
         if isDeviceConnected {
             updateStatusIcon(dotColor: .systemGreen)
@@ -135,21 +147,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func notePttActivity() {
+        guard isPttActive else { return }
+        lastPttActivityAt = Date()
+    }
+
     private func schedulePttWatchdog() {
         cancelPttWatchdog()
         let watchdog =
             DispatchWorkItem { [weak self] in
                 guard let self else { return }
-                if self.isDeviceConnected {
-                    self.updateStatusIcon(dotColor: .systemGreen)
+                guard self.isPttActive else { return }
+
+                let now = Date()
+                let lastActivity = self.lastPttActivityAt ?? now
+                let elapsed = now.timeIntervalSince(lastActivity)
+
+                if elapsed >= Self.pttStaleTimeoutSec {
+                    self.setPttInactive()
+                } else {
+                    self.schedulePttWatchdog()
                 }
             }
         pttActiveWatchdog = watchdog
-        DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: watchdog)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.pttWatchdogCheckIntervalSec, execute: watchdog)
     }
 
     private func cancelPttWatchdog() {
         pttActiveWatchdog?.cancel()
         pttActiveWatchdog = nil
     }
+
+    private static let pttStaleTimeoutSec: TimeInterval = 20
+    private static let pttWatchdogCheckIntervalSec: TimeInterval = 2
 }
